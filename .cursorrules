@@ -6,4 +6,9 @@
 - Use diagrams-as-code (Mermaid or PlantUML) and keep them updated.
 - Never commit secrets; use env vars.
 - Maintain /docs/ai/AI_USAGE_LOG.md with prompts and human edits.
+- Backlog: /docs/product/EPICS_AND_STORIES.md
+- Tickets + estados: GitHub Issues/Projects ONLY (no states in Markdown)
+- Enforce IDs: EPIC/US/T/ADR/ENT/API/UT/IT/BDD/E2E
+- Every commit/PR references T-xxx; every T-xxx references US-xx
+- No implementation without US + T + acceptance criteria
 

@@ -1,0 +1,26 @@
+# NAVIGATION FLOW (from Figma Prototype)
+
+## Start: Landing Page
+
+Landing
+  - CTA "Explore resources" → Dashboard
+  - CTA "Publish resource" → Login
+
+Login
+  - Success → Dashboard
+  - Error → Stay + show error message
+
+Dashboard
+  - Click Resource Card → Resource Detail
+  - + Publish Resource → Publish Page
+
+Publish Page
+  - Publish success → Resource Detail
+  - Validation error → Stay on page
+
+Resource Detail
+  - Click Validate → Validation action
+  - Click Reuse → Reuse flow
+
+Profile
+  - Click Resource → Resource Detail

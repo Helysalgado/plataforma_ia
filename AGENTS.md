@@ -116,4 +116,67 @@ Mantener `/docs/ai/AI_USAGE_LOG.md` con:
 - CI:
   - `make ci`
 
+## 10) Backlog, Tickets y Trazabilidad (GitHub-first)
+
+### 10.1 Identificadores oficiales
+- Épicas: `EPIC-01`, `EPIC-02`, ...
+- Historias: `US-01`, `US-02`, ...
+- Tickets (GitHub Issues): `T-001`, `T-002`, ...
+- ADRs: `ADR-001`, `ADR-002`, ...
+- Entidades: `ENT-RESOURCE`, `ENT-USER`, ...
+- Endpoints: `API-XXX-01`
+- Tests:
+  - Unit: `UT-XXX-01`
+  - Integration: `IT-XXX-01`
+  - BDD: `BDD-XXX-01`
+  - E2E: `E2E-01`
+
+### 10.2 Fuente de verdad
+- Backlog funcional (épicas e historias): `/docs/product/EPICS_AND_STORIES.md`
+- Tickets operativos y estado (Planned/In Progress/Done): **GitHub Issues/Projects**
+- Documentación técnica (arquitectura, datos, API, calidad): `/docs/*`
+
+> Regla: **No registrar estados de tickets en Markdown.**
+> El estado vive únicamente en GitHub.
+
+### 10.3 Reglas de trazabilidad obligatorias
+- Cada historia `US-xx` debe listar los tickets `T-xxx` que la implementan.
+- Cada ticket `T-xxx` (Issue) debe referenciar:
+  - Historia `US-xx`
+  - Área (Backend/Frontend/Data/QA/Infra/E2E/Docs)
+  - Módulo o ruta del repo
+  - Impacto (qué habilita)
+  - IDs relacionados (ENT/API/UT/IT/BDD/E2E) cuando aplique
+
+### 10.4 Convención de GitHub Issues (Tickets)
+- Todo ticket es un **Issue** con título:
+  - `T-001 — <título>`
+- El cuerpo del Issue debe incluir (mínimo):
+  - `User Story: US-xx`
+  - `Área: Backend|Frontend|Data|QA|Infra|E2E|Docs`
+  - `Módulo/Ruta: ...`
+  - `Impacto: ...`
+  - `Checklist de tareas`
+  - `Trazabilidad (opcional): ENT-..., API-..., UT-..., IT-..., BDD-..., E2E-...`
+
+### 10.5 Commits y PRs (obligatorio)
+- Todo commit y PR debe referenciar al menos un ticket:
+  - `T-001: <mensaje>`
+- PR template debe incluir:
+  - Ticket(s): `T-xxx`
+  - Historia: `US-xx`
+  - Tests ejecutados (unit/integration/e2e)
+  - Docs actualizadas si aplica
+
+### 10.6 Política de implementación
+- Prohibido implementar funcionalidad sin:
+  - Historia `US-xx` definida con criterios Given/When/Then
+  - Ticket `T-xxx` creado en GitHub y vinculado a la historia
+
+### 10.7 Opcional: índice de tickets en docs
+Si se requiere para auditoría académica, crear:
+- `/docs/product/TICKETS_INDEX.md`
+que contenga únicamente:
+- Lista de `T-xxx` con link a GitHub Issues
+- (sin estados)
 

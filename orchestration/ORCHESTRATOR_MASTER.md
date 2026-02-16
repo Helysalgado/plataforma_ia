@@ -76,6 +76,38 @@ FASE 2 — REFINAMIENTO DE PRODUCTO (Rol activo: PM + Analyst)
 - Crear tickets trazables (historia, módulo, impacto).
 Salida: /docs/product/*
 
+FASE 2.5 — UX STATE FORMALIZATION  (Rol activo: UX Lead + Tech Lead)
+- Analizar las pantallas oficiales en `/docs/ux/figma/`.
+- Identificar y formalizar todos los estados por pantalla:
+  - loading
+  - empty
+  - validation error
+  - backend error
+  - success
+  - permisos insuficientes
+- Documentar estados en `/docs/ux/UI_STATES.md`.
+- Verificar coherencia con el flujo E2E prioritario.
+- Detectar impacto en:
+  - Historias existentes
+  - Nuevas historias necesarias
+  - Entidades del modelo de datos
+  - Endpoints requeridos
+  - Reglas de autorización (RBAC)
+- Actualizar si aplica:
+  - `/docs/product/E2E_PRIORITY_FLOW.md`
+  - `/docs/product/EPICS_AND_STORIES.md`
+- Identificar riesgos técnicos derivados del diseño.
+- Formular máximo 5 preguntas si hay ambigüedades críticas.
+
+Salida:  
+- `/docs/ux/UI_STATES.md` actualizado  
+- Historias y flujo E2E ajustados si aplica  
+
+Regla:  
+No avanzar a FASE 3 (Arquitectura) hasta que todos los estados estén formalizados y su impacto técnico identificado.
+
+
+
 FASE 3 — DISEÑO TÉCNICO (Rol activo: Architect)
 - Arquitectura monolítica modular (dominios).
 - ADRs para decisiones importantes.
