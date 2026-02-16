@@ -1,0 +1,9 @@
+- Follow AGENTS.md as the source of truth.
+- Work in phases: Audit -> Refine -> Design -> Tests -> Implementation -> Delivery.
+- If requirements are ambiguous, ask questions (max 7) and stop.
+- Update docs in /docs before coding when behavior changes.
+- Always add tests for new behavior.
+- Use diagrams-as-code (Mermaid or PlantUML) and keep them updated.
+- Never commit secrets; use env vars.
+- Maintain /docs/ai/AI_USAGE_LOG.md with prompts and human edits.
+

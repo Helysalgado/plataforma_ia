@@ -1,0 +1,83 @@
+name: Ticket (T-xxx)
+description: Trabajo técnico trazable a una User Story
+title: "T-000 — <título>"
+labels: ["ticket"]
+assignees: []
+
+body:
+  - type: input
+    id: story
+    attributes:
+      label: User Story (US-xx)
+      placeholder: "US-01"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Backend
+        - Frontend
+        - Data/DB
+        - QA/Testing
+        - Infra/DevOps
+        - E2E
+        - Documentation
+    validations:
+      required: true
+
+  - type: input
+    id: module
+    attributes:
+      label: Módulo / Ruta
+      placeholder: "backend/services, frontend/app, infra/ci"
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto
+      description: ¿Qué habilita o desbloquea?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Alcance / Checklist
+      value: |
+        - [ ] Implementación
+        - [ ] Tests
+        - [ ] Validaciones
+        - [ ] Documentación (si aplica)
+    validations:
+      required: true
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: Trazabilidad (IDs relacionados)
+      description: |
+        Entidades: ENT-...
+        Endpoints: API-...
+        Tests: UT-... / IT-... / BDD-... / E2E-...
+      value: |
+        Entidades:
+        Endpoints:
+        Tests:
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done (DoD del ticket)
+      value: |
+        - [ ] Tests pasan localmente
+        - [ ] Sin secretos en código
+        - [ ] PR creado
+        - [ ] Referencia a T-xxx en commit/PR
+    validations:
+      required: true
+
