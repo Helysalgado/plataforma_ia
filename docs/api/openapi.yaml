@@ -1,0 +1,1071 @@
+# OpenAPI Specification — BioAI Hub API
+
+openapi: 3.0.3
+
+info:
+  title: BioAI Hub API
+  description: |
+    API REST para BioAI Hub — Institutional AI Repository
+    
+    **Dominio:** bioai.ccg.unam.mx
+    
+    **Autenticación:** JWT Bearer Token (access token en header Authorization)
+    
+    **Base URL:** https://bioai.ccg.unam.mx/api
+    
+    **Documentación completa:** Ver `/docs/api/` y `/docs/architecture/ARCHITECTURE.md`
+  version: 1.0.0
+  contact:
+    name: CCG UNAM — Unidad de Bioinformática
+    email: bioinfo@ccg.unam.mx
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://bioai.ccg.unam.mx/api
+    description: Production
+  - url: http://localhost:8000/api
+    description: Development
+
+tags:
+  - name: Authentication
+    description: Registro, login, verificación de email
+  - name: Resources
+    description: CRUD de recursos y versiones
+  - name: Interactions
+    description: Votos y forks (reutilización)
+  - name: Validation
+    description: Validación manual y automática (Admin)
+  - name: Notifications
+    description: Notificaciones in-app
+  - name: Users
+    description: Perfiles de usuario
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtenido del endpoint /auth/login
+        
+        Incluir en header: `Authorization: Bearer <token>`
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          maxLength: 200
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+        bio:
+          type: string
+          maxLength: 500
+          nullable: true
+        email_verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_active:
+          type: boolean
+        is_admin:
+          type: boolean
+          description: Computed property (user has Admin role)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner:
+          $ref: '#/components/schemas/UserSummary'
+        source_type:
+          type: string
+          enum: [Internal, GitHub-Linked]
+        derived_from_resource:
+          $ref: '#/components/schemas/ResourceSummary'
+          nullable: true
+        derived_from_version:
+          type: string
+          nullable: true
+          description: Version number (e.g. "1.0.0")
+        forks_count:
+          type: integer
+          minimum: 0
+        latest_version:
+          $ref: '#/components/schemas/ResourceVersion'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ResourceVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        resource_id:
+          type: string
+          format: uuid
+        version_number:
+          type: string
+          pattern: '^\d+\.\d+\.\d+$'
+          example: "1.0.0"
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+          description: Markdown supported
+        type:
+          type: string
+          enum: [Prompt, Workflow, Notebook, Dataset, Tool, Other]
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 30
+          maxItems: 10
+        content:
+          type: string
+          nullable: true
+          description: Content (if source_type is Internal)
+        content_hash:
+          type: string
+          nullable: true
+          description: SHA256 hash (if source_type is Internal)
+        repo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: GitHub repository URL (if source_type is GitHub-Linked)
+        repo_tag:
+          type: string
+          nullable: true
+          description: Git tag (if source_type is GitHub-Linked)
+        repo_commit_sha:
+          type: string
+          pattern: '^[a-f0-9]{40}$'
+          nullable: true
+          description: Git commit SHA (if source_type is GitHub-Linked)
+        license:
+          type: string
+          nullable: true
+          description: License (if source_type is GitHub-Linked)
+        example:
+          type: string
+          nullable: true
+          maxLength: 2000
+        changelog:
+          type: string
+          nullable: true
+          maxLength: 500
+        status:
+          type: string
+          enum: [Sandbox, Pending Validation, Validated]
+        validated_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_latest:
+          type: boolean
+        pid:
+          type: string
+          example: "ccg-ai:R-f47ac10b@v1.0.0"
+          description: Persistent Identifier (computed)
+        votes_count:
+          type: integer
+          description: Total votes (computed)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ResourceSummary:
+      type: object
+      description: Resumen de recurso (para cards y referencias)
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        owner:
+          $ref: '#/components/schemas/UserSummary'
+        status:
+          type: string
+          enum: [Sandbox, Pending Validation, Validated]
+        votes_count:
+          type: integer
+        forks_count:
+          type: integer
+
+    UserSummary:
+      type: object
+      description: Resumen de usuario (para referencias)
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ResourceValidated, ResourceForked, ValidationRevoked, ValidationRequested]
+        message:
+          type: string
+        resource:
+          $ref: '#/components/schemas/ResourceSummary'
+          nullable: true
+        related_user:
+          $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Vote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        resource_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code (optional)
+        details:
+          type: object
+          nullable: true
+          description: Validation errors (field-level)
+
+    PaginatedResources:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Total number of resources
+        next:
+          type: string
+          format: uri
+          nullable: true
+          description: Next page URL
+        previous:
+          type: string
+          format: uri
+          nullable: true
+          description: Previous page URL
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceSummary'
+
+paths:
+  # ==================== AUTHENTICATION ====================
+  
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Registrar nuevo usuario
+      description: |
+        Crea cuenta nueva con email y contraseña.
+        Envía email de verificación automáticamente.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                password:
+                  type: string
+                  minLength: 8
+                  description: Mínimo 8 caracteres, 1 mayúscula, 1 número
+            example:
+              email: "juan.perez@example.com"
+              name: "Juan Pérez"
+              password: "SecurePass123!"
+      responses:
+        '201':
+          description: Usuario creado, email de verificación enviado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Usuario registrado. Verifica tu email."
+                  user_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Validación fallida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Validation error"
+                details:
+                  email: ["Este email ya está registrado"]
+                  password: ["Contraseña debe incluir al menos 1 número"]
+        '409':
+          description: Email ya registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Email already registered"
+        '500':
+          description: Error del servidor
+
+  /auth/verify-email/{token}:
+    get:
+      tags: [Authentication]
+      summary: Verificar email con token
+      description: |
+        Valida token de verificación enviado por email.
+        Token expira en 24 horas.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Token de verificación (UUID o JWT)
+      responses:
+        '200':
+          description: Email verificado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Email verificado exitosamente"
+        '400':
+          description: Token inválido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                expired:
+                  value:
+                    error: "Token expired"
+                invalid:
+                  value:
+                    error: "Invalid token"
+        '404':
+          description: Token no encontrado
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Iniciar sesión
+      description: |
+        Autentica usuario con email y contraseña.
+        Retorna JWT access token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+            example:
+              email: "juan.perez@example.com"
+              password: "SecurePass123!"
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access:
+                    type: string
+                    description: JWT access token (expira en 24h)
+                  refresh:
+                    type: string
+                    description: JWT refresh token (expira en 7d) - opcional MVP
+                  user:
+                    $ref: '#/components/schemas/User'
+              example:
+                access: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                user:
+                  id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                  email: "juan.perez@example.com"
+                  name: "Juan Pérez"
+        '401':
+          description: Credenciales incorrectas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid credentials"
+        '403':
+          description: Email no verificado o cuenta suspendida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                not_verified:
+                  value:
+                    error: "Email not verified"
+                    code: "EMAIL_NOT_VERIFIED"
+                suspended:
+                  value:
+                    error: "Account suspended"
+                    code: "ACCOUNT_SUSPENDED"
+        '429':
+          description: Rate limit excedido (5 intentos / 15 min)
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Cerrar sesión
+      description: |
+        Invalida token actual (blacklist).
+        Opcional en MVP si no hay blacklist.
+      responses:
+        '200':
+          description: Logout exitoso
+        '401':
+          description: No autenticado
+
+  # ==================== RESOURCES ====================
+
+  /resources:
+    get:
+      tags: [Resources]
+      summary: Listar recursos
+      description: |
+        Lista recursos públicos con paginación y filtros.
+        Acceso público (no requiere autenticación).
+      security: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Número de página
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Items por página
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Búsqueda textual en título y descripción
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [Prompt, Workflow, Notebook, Dataset, Tool, Other]
+          description: Filtro por tipo
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [Sandbox, Validated]
+          description: Filtro por estado
+        - name: tags
+          in: query
+          schema:
+            type: string
+          description: Filtro por tags (comma-separated)
+          example: "bioinformatics,RNA-seq"
+        - name: ordering
+          in: query
+          schema:
+            type: string
+            enum: [-created_at, created_at, -votes_count, votes_count, title, -title]
+            default: -created_at
+          description: Ordenamiento (-created_at = más recientes primero)
+      responses:
+        '200':
+          description: Lista de recursos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResources'
+        '500':
+          description: Error del servidor
+
+    post:
+      tags: [Resources]
+      summary: Publicar nuevo recurso
+      description: |
+        Crea nuevo recurso con versión inicial v1.0.0.
+        Requiere autenticación y email verificado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, type, source_type]
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                description:
+                  type: string
+                  maxLength: 5000
+                type:
+                  type: string
+                  enum: [Prompt, Workflow, Notebook, Dataset, Tool, Other]
+                source_type:
+                  type: string
+                  enum: [Internal, GitHub-Linked]
+                tags:
+                  type: array
+                  items:
+                    type: string
+                    maxLength: 30
+                  maxItems: 10
+                content:
+                  type: string
+                  description: Required if source_type is Internal
+                example:
+                  type: string
+                  maxLength: 2000
+                repo_url:
+                  type: string
+                  format: uri
+                  description: Required if source_type is GitHub-Linked
+                repo_tag:
+                  type: string
+                  description: Recommended for Validated resources
+                repo_commit_sha:
+                  type: string
+                  pattern: '^[a-f0-9]{40}$'
+                license:
+                  type: string
+                  description: Required if source_type is GitHub-Linked
+                status:
+                  type: string
+                  enum: [Sandbox, Pending Validation]
+                  default: Sandbox
+            example:
+              title: "RNA-seq Analysis Workflow"
+              description: "Paso a paso para análisis de RNA-seq con herramientas modernas"
+              type: "Workflow"
+              source_type: "GitHub-Linked"
+              tags: ["RNA-seq", "bioinformática", "transcriptómica"]
+              repo_url: "https://github.com/user/rna-seq-workflow"
+              repo_tag: "v1.2.0"
+              license: "MIT"
+              status: "Pending Validation"
+      responses:
+        '201':
+          description: Recurso creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '400':
+          description: Validación fallida
+        '403':
+          description: Email no verificado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Email not verified"
+                code: "EMAIL_NOT_VERIFIED"
+        '429':
+          description: Rate limit excedido (10 recursos / hora)
+
+  /resources/{id}:
+    get:
+      tags: [Resources]
+      summary: Obtener detalle de recurso
+      description: |
+        Retorna recurso con última versión.
+        Acceso público.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurso encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          description: Recurso no encontrado
+
+    patch:
+      tags: [Resources]
+      summary: Editar recurso
+      description: |
+        Actualiza recurso. Comportamiento:
+        - Si última versión NO Validated: update in-place
+        - Si última versión SÍ Validated: crear nueva versión (vNext)
+        
+        Requiere ser owner o admin.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                content:
+                  type: string
+                changelog:
+                  type: string
+                  description: Requerido si crea nueva versión
+      responses:
+        '200':
+          description: Recurso actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resource:
+                    $ref: '#/components/schemas/Resource'
+                  version_created:
+                    type: boolean
+                    description: True si se creó nueva versión
+                  new_version_number:
+                    type: string
+                    nullable: true
+        '403':
+          description: No autorizado (no es owner ni admin)
+        '404':
+          description: Recurso no encontrado
+
+    delete:
+      tags: [Resources]
+      summary: Eliminar recurso
+      description: |
+        Soft delete (marca deleted_at).
+        Requiere ser owner o admin.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Recurso eliminado exitosamente
+        '403':
+          description: No autorizado
+        '404':
+          description: Recurso no encontrado
+
+  /resources/{id}/vote:
+    post:
+      tags: [Interactions]
+      summary: Votar o desvotar recurso (toggle)
+      description: |
+        Comportamiento idempotente:
+        - Si no ha votado: crea voto
+        - Si ya votó: elimina voto (unvote)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Voto registrado o removido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  voted:
+                    type: boolean
+                    description: True si votó, False si desvotó
+                  votes_count:
+                    type: integer
+                    description: Total de votos actualizado
+              example:
+                voted: true
+                votes_count: 26
+        '401':
+          description: No autenticado
+        '404':
+          description: Recurso no encontrado
+
+  /resources/{id}/fork:
+    post:
+      tags: [Interactions]
+      summary: Reutilizar recurso (fork)
+      description: |
+        Crea nuevo recurso derivado del original.
+        - Copia contenido de última versión del original
+        - Nuevo recurso con owner = usuario actual
+        - Source type siempre es Internal (aunque original sea GitHub-Linked)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Fork creado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resource:
+                    $ref: '#/components/schemas/Resource'
+                  message:
+                    type: string
+                    example: "Recurso reutilizado. Edítalo en /resources/{newId}/edit"
+        '401':
+          description: No autenticado
+        '404':
+          description: Recurso original no encontrado
+
+  /resources/{id}/validate:
+    post:
+      tags: [Validation]
+      summary: Validar recurso manualmente (Admin)
+      description: |
+        Promueve última versión de Sandbox/Pending → Validated.
+        Solo Admin puede ejecutar.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recurso validado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Recurso validado"
+                  validated_at:
+                    type: string
+                    format: date-time
+        '403':
+          description: No autorizado (no es admin)
+        '404':
+          description: Recurso no encontrado
+
+  /resources/{id}/revoke-validation:
+    post:
+      tags: [Validation]
+      summary: Revocar validación (Admin)
+      description: |
+        Cambia status de Validated → Sandbox.
+        Requiere razón (enviada al owner via notificación).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: Razón de la revocación
+            example:
+              reason: "Contenido desactualizado, referencias rotas"
+      responses:
+        '200':
+          description: Validación revocada
+        '400':
+          description: Razón faltante o inválida
+        '403':
+          description: No autorizado (no es admin)
+        '404':
+          description: Recurso no encontrado
+
+  /resources/featured:
+    get:
+      tags: [Resources]
+      summary: Recursos destacados
+      description: |
+        Retorna 6 recursos Validated ordenados por votos (para home).
+        Acceso público.
+      security: []
+      responses:
+        '200':
+          description: Lista de recursos destacados
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 6
+                items:
+                  $ref: '#/components/schemas/ResourceSummary'
+
+  # ==================== NOTIFICATIONS ====================
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Listar notificaciones del usuario
+      description: |
+        Retorna notificaciones del usuario autenticado.
+        Ordenadas por fecha (más recientes primero).
+      parameters:
+        - name: unread_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Filtrar solo no leídas
+      responses:
+        '200':
+          description: Lista de notificaciones
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  unread_count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+        '401':
+          description: No autenticado
+
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Marcar notificación como leída
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notificación marcada como leída
+        '401':
+          description: No autenticado
+        '404':
+          description: Notificación no encontrada
+
+  /notifications/mark-all-read:
+    post:
+      tags: [Notifications]
+      summary: Marcar todas las notificaciones como leídas
+      responses:
+        '200':
+          description: Todas marcadas como leídas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  marked_count:
+                    type: integer
+                    description: Número de notificaciones marcadas
+        '401':
+          description: No autenticado
+
+  # ==================== USERS ====================
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Obtener perfil de usuario
+      description: |
+        Retorna perfil público de usuario.
+        Si es propio perfil, incluye email.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Perfil de usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  metrics:
+                    type: object
+                    properties:
+                      resources_published:
+                        type: integer
+                      resources_validated:
+                        type: integer
+                      total_votes_received:
+                        type: integer
+                      total_forks_received:
+                        type: integer
+        '404':
+          description: Usuario no encontrado
+
+  /users/{id}/resources:
+    get:
+      tags: [Users]
+      summary: Recursos publicados por usuario
+      description: Retorna lista de recursos creados por usuario
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Lista de recursos del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResources'

@@ -32,6 +32,10 @@
 
 ## Start: Home (/)
 
+![Home Screen](./docs/ux/figma/home.png)
+
+Route: `/`
+
 User state: Not authenticated (default)
 
 Actions:
@@ -53,6 +57,8 @@ Actions:
 ---
 
 # 3. EXPLORE FLOW (Public)
+
+![Explore Screen](./docs/ux/figma/explore.png)
 
 Route: `/explore`
 
@@ -82,6 +88,8 @@ Notes:
 ---
 
 # 4. RESOURCE DETAIL FLOW
+
+![Resource Detail](./docs/ux/figma/resource-detail.png)
 
 Route: `/resources/:id`
 
@@ -182,6 +190,8 @@ Traceability:
 ---
 
 # 6. PUBLISH FLOW
+
+![Publish](./docs/ux/figma/publish.png)
 
 Route: `/publish`
 

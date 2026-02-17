@@ -1,0 +1,270 @@
+```mermaid
+erDiagram
+    users ||--o{ user_roles : "has"
+    roles ||--o{ user_roles : "assigned to"
+    users ||--o{ resources : "owns"
+    users ||--o{ votes : "casts"
+    users ||--o{ notifications : "receives"
+    users ||--o{ reports : "creates"
+    users ||--o{ reports : "resolves (admin)"
+    
+    resources ||--o{ resource_versions : "has versions"
+    resources ||--o{ votes : "receives"
+    resources ||--o{ notifications : "relates to"
+    resources ||--o{ reports : "reported"
+    resources ||--o{ resources : "derived from (fork)"
+    resources }o--|| resource_versions : "derived from version"
+    
+    resource_versions ||--o{ resources : "forked as"
+    
+    users {
+        uuid id PK
+        string email UK "UNIQUE NOT NULL INDEX"
+        string password_hash "NOT NULL"
+        string name "NOT NULL"
+        string avatar_url "NULL"
+        string bio "NULL CHECK length<=500"
+        timestamp email_verified_at "NULL INDEX"
+        boolean is_active "DEFAULT TRUE"
+        timestamp created_at "NOT NULL"
+        timestamp updated_at "NOT NULL"
+    }
+    
+    roles {
+        uuid id PK
+        string name UK "UNIQUE NOT NULL"
+        string description "NULL"
+        timestamp created_at "NOT NULL"
+    }
+    
+    user_roles {
+        uuid id PK
+        uuid user_id FK "NOT NULL CASCADE"
+        uuid role_id FK "NOT NULL CASCADE"
+        timestamp assigned_at "NOT NULL"
+    }
+    
+    resources {
+        uuid id PK
+        uuid owner_id FK "NOT NULL CASCADE INDEX"
+        string source_type "NOT NULL CHECK Internal|GitHub-Linked"
+        uuid derived_from_resource_id FK "NULL SET_NULL"
+        uuid derived_from_version_id FK "NULL SET_NULL"
+        integer forks_count "DEFAULT 0 CHECK >=0"
+        timestamp deleted_at "NULL INDEX soft-delete"
+        timestamp created_at "NOT NULL INDEX"
+        timestamp updated_at "NOT NULL"
+    }
+    
+    resource_versions {
+        uuid id PK
+        uuid resource_id FK "NOT NULL CASCADE INDEX"
+        string version_number "NOT NULL CHECK format X.Y.Z"
+        string title "NOT NULL INDEX"
+        text description "NOT NULL"
+        string type "NOT NULL CHECK Prompt|Workflow|..."
+        jsonb tags "NOT NULL DEFAULT [] GIN INDEX"
+        text content "NULL for Internal"
+        string content_hash "NULL SHA256"
+        string repo_url "NULL for GitHub-Linked"
+        string repo_tag "NULL"
+        string repo_commit_sha "NULL"
+        string license "NULL"
+        text example "NULL"
+        text changelog "NULL"
+        string status "NOT NULL INDEX CHECK Sandbox|Validated|..."
+        timestamp validated_at "NULL"
+        boolean is_latest "NOT NULL DEFAULT FALSE INDEX"
+        timestamp created_at "NOT NULL INDEX"
+        timestamp updated_at "NOT NULL"
+    }
+    
+    votes {
+        uuid id PK
+        uuid user_id FK "NOT NULL CASCADE"
+        uuid resource_id FK "NOT NULL CASCADE"
+        timestamp created_at "NOT NULL"
+    }
+    
+    notifications {
+        uuid id PK
+        uuid user_id FK "NOT NULL CASCADE INDEX"
+        string type "NOT NULL CHECK enum"
+        uuid resource_id FK "NULL CASCADE"
+        uuid related_user_id FK "NULL SET_NULL"
+        text message "NOT NULL"
+        timestamp read_at "NULL INDEX"
+        timestamp created_at "NOT NULL INDEX"
+    }
+    
+    reports {
+        uuid id PK
+        uuid user_id FK "NOT NULL CASCADE"
+        uuid resource_id FK "NOT NULL CASCADE"
+        string reason "NOT NULL CHECK enum"
+        text description "NOT NULL CHECK length<=500"
+        string status "NOT NULL DEFAULT Pending CHECK enum"
+        uuid resolved_by_user_id FK "NULL SET_NULL"
+        timestamp resolved_at "NULL"
+        timestamp created_at "NOT NULL INDEX"
+    }
+```
+
+---
+
+## Cardinalidades y Relaciones
+
+### Relaciones Principales:
+
+1. **users → resources**: 1:N (Un usuario puede crear muchos recursos)
+   - FK: `resources.owner_id` → `users.id`
+   - ON DELETE: CASCADE
+
+2. **resources → resource_versions**: 1:N (Un recurso tiene muchas versiones)
+   - FK: `resource_versions.resource_id` → `resources.id`
+   - ON DELETE: CASCADE
+   - Constraint: Exactamente 1 versión con `is_latest=TRUE` por recurso
+
+3. **users → votes**: 1:N (Un usuario puede votar muchos recursos)
+   - FK: `votes.user_id` → `users.id`
+   - ON DELETE: CASCADE
+
+4. **resources → votes**: 1:N (Un recurso recibe muchos votos)
+   - FK: `votes.resource_id` → `resources.id`
+   - ON DELETE: CASCADE
+   - Constraint: UNIQUE(`user_id`, `resource_id`) — 1 voto por usuario por recurso
+
+5. **users → notifications**: 1:N (Un usuario recibe muchas notificaciones)
+   - FK: `notifications.user_id` → `users.id`
+   - ON DELETE: CASCADE
+
+6. **resources → resources**: 1:N self-referencing (Un recurso puede ser derivado de otro - fork)
+   - FK: `resources.derived_from_resource_id` → `resources.id`
+   - ON DELETE: SET NULL
+
+7. **resources → resource_versions**: N:1 (Fork deriva de versión específica)
+   - FK: `resources.derived_from_version_id` → `resource_versions.id`
+   - ON DELETE: SET NULL
+
+8. **users → roles**: M:N via user_roles (Un usuario puede tener múltiples roles)
+   - Pivot table: `user_roles`
+   - FK: `user_roles.user_id` → `users.id` (CASCADE)
+   - FK: `user_roles.role_id` → `roles.id` (CASCADE)
+
+9. **users → reports**: 1:N (Un usuario puede crear muchos reportes)
+   - FK: `reports.user_id` → `users.id`
+   - ON DELETE: CASCADE
+
+10. **resources → reports**: 1:N (Un recurso puede tener muchos reportes)
+    - FK: `reports.resource_id` → `resources.id`
+    - ON DELETE: CASCADE
+
+---
+
+## Índices Críticos por Tabla
+
+### users:
+- PK: `id`
+- UNIQUE: `email`
+- INDEX: `email_verified_at` (WHERE NOT NULL)
+- INDEX: `created_at DESC`
+
+### resource_versions:
+- PK: `id`
+- UNIQUE: (`resource_id`, `version_number`)
+- INDEX: (`resource_id`, `is_latest`) WHERE `is_latest=TRUE`
+- INDEX: `status`
+- INDEX: `validated_at DESC` WHERE NOT NULL
+- GIN INDEX: `to_tsvector(title)` — Full-text search
+- GIN INDEX: `tags` — JSONB search
+- INDEX: `created_at DESC`
+
+### votes:
+- PK: `id`
+- UNIQUE: (`user_id`, `resource_id`)
+- INDEX: `user_id`
+- INDEX: `resource_id`
+
+### notifications:
+- PK: `id`
+- INDEX: (`user_id`, `created_at DESC`)
+- INDEX: (`user_id`, `read_at`) WHERE `read_at IS NULL` — Unread notifications
+
+---
+
+## Constraints de Integridad
+
+### Check Constraints:
+
+1. **users**:
+   - `email` format valid (regex)
+   - `name` not empty
+   - `bio` length <= 500
+
+2. **resources**:
+   - `source_type` IN ('Internal', 'GitHub-Linked')
+   - `forks_count` >= 0
+
+3. **resource_versions**:
+   - `version_number` format: `^\d+\.\d+\.\d+$`
+   - `type` IN ('Prompt', 'Workflow', 'Notebook', 'Dataset', 'Tool', 'Other')
+   - `status` IN ('Sandbox', 'Pending Validation', 'Validated')
+   - If source_type='Internal' → `content` NOT NULL
+   - If source_type='GitHub-Linked' → `repo_url` NOT NULL AND `license` NOT NULL
+
+4. **reports**:
+   - `reason` IN ('Inappropriate', 'TechnicalError', 'Spam', 'Plagiarism', 'Other')
+   - `description` length <= 500
+   - `status` IN ('Pending', 'Resolved', 'Rejected')
+
+---
+
+## Soft Delete Pattern
+
+Tablas con soft delete:
+- **resources**: `deleted_at` (NULL si activo)
+
+Queries con soft delete:
+```sql
+-- Activos (default):
+SELECT * FROM resources WHERE deleted_at IS NULL;
+
+-- Incluir eliminados (admin):
+SELECT * FROM resources;
+
+-- Solo eliminados (auditoría):
+SELECT * FROM resources WHERE deleted_at IS NOT NULL;
+```
+
+---
+
+## Normalización
+
+**Forma Normal:** 3FN (Third Normal Form)
+
+**Verificación:**
+- ✅ 1FN: No hay grupos repetitivos (tags en JSONB es válido)
+- ✅ 2FN: Todos los atributos no-key dependen completamente de la PK
+- ✅ 3FN: No hay dependencias transitivas
+
+**Desnormalización estratégica:**
+- `resources.forks_count`: Contador desnormalizado para performance
+- **Justificación:** Evitar COUNT(*) en cada query, actualizado en Service Layer
+
+---
+
+## Storage Estimado (Año 1)
+
+| Tabla | Registros | Bytes/Registro | Total |
+|---|---|---|---|
+| users | 50 | ~500 | 25 KB |
+| roles | 2 | ~200 | 0.4 KB |
+| user_roles | 50 | ~100 | 5 KB |
+| resources | 100 | ~300 | 30 KB |
+| resource_versions | 150 | ~300 KB (con content) | 45 MB |
+| votes | 500 | ~100 | 50 KB |
+| notifications | 1000 | ~500 | 500 KB |
+| reports | 50 | ~500 | 25 KB |
+| **TOTAL** | | | **~46 MB** |
+
+**Conclusión:** Storage muy manejable para MVP. PostgreSQL puede escalar a TB sin problemas.

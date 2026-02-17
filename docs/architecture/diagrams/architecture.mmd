@@ -1,0 +1,116 @@
+```mermaid
+graph TB
+    subgraph Client["CLIENT LAYER"]
+        Browser[Web Browser]
+        NextJS["Next.js 14+ Frontend<br/>- React Server Components<br/>- Client Components<br/>- Tailwind CSS + shadcn/ui"]
+    end
+    
+    subgraph Gateway["API GATEWAY"]
+        Nginx["Nginx Reverse Proxy<br/>- SSL Termination HTTPS<br/>- Rate Limiting global<br/>- Static Files serving<br/>- Load Balancing"]
+    end
+    
+    subgraph Backend["BACKEND LAYER Django + DRF"]
+        direction TB
+        
+        subgraph API["API / Presentation Layer"]
+            AuthViews[Authentication Views<br/>- Register, Login, Verify]
+            ResourceViews[Resource Views<br/>- CRUD, List, Filter]
+            InteractionViews[Interaction Views<br/>- Vote, Fork]
+            ValidationViews[Validation Views<br/>- Validate, Revoke]
+            NotificationViews[Notification Views<br/>- List, MarkRead]
+        end
+        
+        subgraph Services["SERVICE / Business Logic Layer"]
+            AuthService[AuthService<br/>- register user + send email<br/>- verify_email token<br/>- login generate JWT]
+            ResourceService[ResourceService<br/>- create resource + version<br/>- list with filters<br/>- get_by_id]
+            VersioningService[VersioningService<br/>- update in-place or new version<br/>- calculate version_number<br/>- manage is_latest flag]
+            ValidationService[ValidationService<br/>- validate_manually<br/>- revoke_validation<br/>- check_auto_criteria]
+            VoteService[VoteService<br/>- toggle_vote<br/>- has_voted check]
+            ForkService[ForkService<br/>- fork_resource<br/>- create derived resource]
+            NotificationService[NotificationService<br/>- create notification<br/>- mark_as_read<br/>- get_unread_count]
+        end
+        
+        subgraph Data["DATA ACCESS LAYER Django ORM"]
+            UserModel[User Model<br/>- id uuid PK<br/>- email unique<br/>- roles M2M<br/>- email_verified_at]
+            ResourceModel[Resource Model<br/>- id uuid PK<br/>- owner FK User<br/>- source_type<br/>- derived_from FK self]
+            VersionModel[ResourceVersion Model<br/>- id uuid PK<br/>- resource FK<br/>- version_number<br/>- title description content<br/>- status validated_at<br/>- is_latest]
+            VoteModel[Vote Model<br/>- user FK resource FK<br/>- unique constraint<br/>- created_at]
+            NotificationModel[Notification Model<br/>- user FK resource FK<br/>- type message<br/>- read_at]
+            RoleModel[Role Model<br/>- name unique<br/>- users M2M]
+        end
+    end
+    
+    subgraph Database["DATABASE LAYER"]
+        Postgres[(PostgreSQL 15+<br/>- Connection Pooling<br/>- Indexes resources owner created_at<br/>- Indexes versions is_latest status<br/>- Indexes votes user resource<br/>- Daily Backups)]
+    end
+    
+    subgraph External["EXTERNAL SERVICES"]
+        SMTP[SMTP Email Service<br/>- Verification emails<br/>- Password reset<br/>SendGrid / Mailgun / SMTP CCG]
+        GitHub[GitHub API Optional<br/>- Validate repo URLs<br/>- future webhooks]
+        Gravatar[Gravatar API<br/>- Avatar by email<br/>- fallback initials]
+    end
+    
+    subgraph Jobs["BACKGROUND JOBS"]
+        Celery[Celery Worker<br/>- Auto-promotion task daily<br/>- Email sending async]
+        Redis[Redis Optional<br/>- Celery broker<br/>- future caching]
+    end
+    
+    %% Connections
+    Browser --> NextJS
+    NextJS --> Nginx
+    Nginx --> NextJS
+    Nginx --> AuthViews
+    Nginx --> ResourceViews
+    Nginx --> InteractionViews
+    Nginx --> ValidationViews
+    Nginx --> NotificationViews
+    
+    AuthViews --> AuthService
+    ResourceViews --> ResourceService
+    ResourceViews --> VersioningService
+    InteractionViews --> VoteService
+    InteractionViews --> ForkService
+    ValidationViews --> ValidationService
+    NotificationViews --> NotificationService
+    
+    AuthService --> UserModel
+    AuthService --> RoleModel
+    ResourceService --> ResourceModel
+    ResourceService --> VersionModel
+    VersioningService --> VersionModel
+    ValidationService --> VersionModel
+    ValidationService --> NotificationModel
+    VoteService --> VoteModel
+    ForkService --> ResourceModel
+    ForkService --> VersionModel
+    NotificationService --> NotificationModel
+    
+    UserModel --> Postgres
+    ResourceModel --> Postgres
+    VersionModel --> Postgres
+    VoteModel --> Postgres
+    NotificationModel --> Postgres
+    RoleModel --> Postgres
+    
+    AuthService -.->|send email| SMTP
+    ResourceService -.->|validate URL| GitHub
+    UserModel -.->|get avatar| Gravatar
+    
+    ValidationService -.->|trigger| Celery
+    Celery -.->|check criteria| ValidationService
+    Celery --> Redis
+    
+    classDef clientStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef gatewayStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef backendStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef dbStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef externalStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef jobStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    
+    class Client clientStyle
+    class Gateway gatewayStyle
+    class Backend,API,Services,Data backendStyle
+    class Database dbStyle
+    class External externalStyle
+    class Jobs jobStyle
+```
