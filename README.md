@@ -1,5 +1,14 @@
 # BioAI Hub — Institutional AI Repository
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub last commit](https://img.shields.io/github/last-commit/Helysalgado/plataforma_ia)](https://github.com/Helysalgado/plataforma_ia/commits/main)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Django](https://img.shields.io/badge/Django-5.0+-green.svg)](https://www.djangoproject.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-14.0+-black.svg)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue.svg)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen.svg)](docs/)
+
 **Proyecto:** Plataforma institucional para gestión, validación y reutilización de recursos de IA en bioinformática  
 **Institución:** Centro de Ciencias Genómicas (CCG), UNAM  
 **Dominio:** bioai.ccg.unam.mx  
@@ -537,14 +546,26 @@ Más detalles: [`/docs/delivery/RELEASE_PLAN.md`](docs/delivery/RELEASE_PLAN.md)
 
 ## 📝 Licencia
 
-[Pendiente definir con institución CCG]
+Este proyecto está licenciado bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
+
+```
+MIT License
+
+Copyright (c) 2026 Centro de Ciencias Genómicas (CCG), UNAM
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction...
+```
 
 ---
 
 ## 👥 Equipo
 
 **Institución:** Centro de Ciencias Genómicas (CCG), UNAM  
-**Contacto:** [Pendiente]
+**Desarrollado por:** Heladia Salgado  
+**Con asistencia de:** Claude Sonnet 4.5 (Anthropic)  
+**Contacto:** heladia@ccg.unam.mx
 
 ---
 
