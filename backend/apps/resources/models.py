@@ -97,10 +97,8 @@ class Resource(models.Model):
     
     @property
     def votes_count(self):
-        """Count of votes (computed). Placeholder until Vote model exists."""
-        # TODO: Re-enable when Vote model exists (US-16)
-        # return self.votes.count()
-        return 0
+        """Count of votes (computed)."""
+        return self.votes.count()
     
     @property
     def is_fork(self):

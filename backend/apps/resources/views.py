@@ -69,18 +69,17 @@ class ResourceListView(APIView):
         )
         
         # Serialize results
-        # TODO: Re-enable when Vote model is implemented (US-16)
         # Annotate votes_count for each resource
-        # resource_ids = [r.id for r in result['results']]
-        # votes_counts = dict(
-        #     Resource.objects.filter(id__in=resource_ids)
-        #     .annotate(votes_count_annotated=Count('votes'))
-        #     .values_list('id', 'votes_count_annotated')
-        # )
+        resource_ids = [r.id for r in result['results']]
+        votes_counts = dict(
+            Resource.objects.filter(id__in=resource_ids)
+            .annotate(votes_count_annotated=Count('votes'))
+            .values_list('id', 'votes_count_annotated')
+        )
         
-        # Attach votes_count to each resource (temporary: set to 0)
+        # Attach votes_count to each resource
         for resource in result['results']:
-            resource.votes_count_annotated = 0  # votes_counts.get(resource.id, 0)
+            resource.votes_count_annotated = votes_counts.get(resource.id, 0)
         
         serializer = ResourceListSerializer(result['results'], many=True)
         
@@ -111,12 +110,9 @@ class ResourceDetailView(APIView):
                 'versions',
                 'owner',
                 'owner__roles'
+            ).annotate(
+                votes_count_annotated=Count('votes')
             ).get(id=resource_id, deleted_at__isnull=True)
-            # TODO: Re-enable when Vote model exists (US-16)
-            # .annotate(votes_count_annotated=Count('votes'))
-            
-            # Temporary: set votes_count to 0
-            resource.votes_count_annotated = 0
         except Resource.DoesNotExist:
             return Response(
                 {'error': 'Resource not found', 'error_code': 'RESOURCE_NOT_FOUND'},
@@ -162,12 +158,9 @@ class ResourceCreateView(APIView):
                 'versions',
                 'owner',
                 'owner__roles'
+            ).annotate(
+                votes_count_annotated=Count('votes')
             ).get(id=resource.id)
-            # TODO: Re-enable when Vote exists (US-16)
-            # .annotate(votes_count_annotated=Count('votes'))
-            
-            # Temporary: set votes_count to 0
-            resource.votes_count_annotated = 0
             
             detail_serializer = ResourceDetailSerializer(resource)
             

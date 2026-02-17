@@ -54,8 +54,8 @@ class ResourceService:
         )
         queryset = queryset.prefetch_related(latest_versions, 'owner', 'owner__roles')
         
-    # Annotate with votes count (skip if Vote model doesn't exist yet)
-        # queryset = queryset.annotate(votes_count_annotated=Count('votes'))
+        # Annotate with votes count
+        queryset = queryset.annotate(votes_count_annotated=Count('votes'))
         
         # Apply filters on latest version
         if 'type' in filters:

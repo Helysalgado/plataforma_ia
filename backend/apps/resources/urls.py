@@ -6,9 +6,11 @@ from apps.resources.views import (
     ResourceDetailView,
     ResourceCreateView,
 )
+from apps.interactions.views import VoteToggleView
 
 urlpatterns = [
     path('', ResourceListView.as_view(), name='resource-list'),
     path('create/', ResourceCreateView.as_view(), name='resource-create'),
     path('<uuid:resource_id>/', ResourceDetailView.as_view(), name='resource-detail'),
+    path('<uuid:resource_id>/vote/', VoteToggleView.as_view(), name='vote-toggle'),
 ]
