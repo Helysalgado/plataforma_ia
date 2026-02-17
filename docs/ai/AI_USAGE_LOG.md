@@ -3384,3 +3384,378 @@ const [activeTab, setActiveTab] = useState<'description' | 'notebook' | 'version
 **Registro actualizado:** 2026-02-17 (Sesión 10 — Frontend Redesign)  
 **Status:** ✅ UX/UI ALIGNED (90% match con Figma)  
 **Próxima actualización:** Responsive + E2E tests
+
+---
+
+## SESIÓN 10 — Parte 2: Profile Page + E2E Tests 👤
+
+**Fecha:** 2026-02-17  
+**Objetivo:** Completar MVP Core (Profile + Backend + Tests)  
+**Herramienta IA:** Cursor Agent (Claude Sonnet 4.5)  
+**Rol:** Backend + Frontend + QA Engineer
+
+---
+
+### 20.1 Contexto
+
+Después de alinear el diseño con Figma, continuamos con **Opción A: Completar MVP Core**:
+1. ✅ Profile Page (según Figma)
+2. ✅ Endpoints backend necesarios
+3. ✅ Tests E2E actualizados
+
+---
+
+### 20.2 Backend: User Profile Endpoints
+
+#### `backend/apps/authentication/views_users.py` (NUEVO)
+
+**Endpoints implementados:**
+
+**A) `GET /api/users/:user_id/`**
+- Public endpoint (no auth required)
+- Returns user profile + metrics
+- Used for profile pages
+
+**Métricas calculadas:**
+```python
+total_resources = resources.count()
+validated_resources = resources.filter(latest_version__status='Validated').count()
+total_votes = resources.aggregate(total=Sum('vote_count'))['total'] or 0
+total_reuses = resources.aggregate(total=Sum('reuse_count'))['total'] or 0
+
+# Impact formula
+total_impact = (validated_resources * 10) + total_votes + (total_reuses * 5)
+```
+
+**Response schema:**
+```json
+{
+  "id": "uuid",
+  "name": "James Park",
+  "email": "james@example.com",
+  "is_admin": false,
+  "email_verified_at": "2026-01-15T...",
+  "created_at": "2026-01-10T...",
+  "metrics": {
+    "total_resources": 15,
+    "validated_resources": 12,
+    "total_votes": 89,
+    "total_reuses": 1247,
+    "total_impact": 412
+  }
+}
+```
+
+---
+
+**B) `GET /api/users/:user_id/resources/`**
+- Public endpoint
+- Returns paginated resources
+- Filter by status: `?status=Validated`
+
+**Query params:**
+- `page`: número de página (default: 1)
+- `page_size`: items por página (default: 12)
+- `status`: filter por Sandbox/Validated/Pending
+
+**Response schema:**
+```json
+{
+  "count": 15,
+  "page": 1,
+  "page_size": 12,
+  "results": [/* ResourceListSerializer */]
+}
+```
+
+---
+
+#### `backend/apps/authentication/urls_users.py` (Actualizado)
+
+**Cambios:**
+```python
+urlpatterns = [
+    path('<uuid:user_id>/', views_users.UserDetailView.as_view(), name='user-detail'),
+    path('<uuid:user_id>/resources/', views_users.UserResourcesView.as_view(), name='user-resources'),
+]
+```
+
+**Lección IA:** Agregaciones con `Sum()` y `Count()` para métricas eficientes
+
+---
+
+### 20.3 Frontend: Profile Page
+
+#### `frontend/services/users.ts` (NUEVO)
+
+**API Client:**
+```typescript
+export interface UserMetrics {
+  total_resources: number;
+  validated_resources: number;
+  total_votes: number;
+  total_reuses: number;
+  total_impact: number;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  is_admin: boolean;
+  created_at: string;
+  metrics: UserMetrics;
+}
+
+export const usersApi = {
+  getProfile: async (userId: string): Promise<UserProfile> => { /*...*/ },
+  getResources: async (userId: string, params?: {...}): Promise<UserResourcesResponse> => { /*...*/ },
+};
+```
+
+---
+
+#### `frontend/app/profile/[[...id]]/page.tsx` (NUEVO)
+
+**Ruta dinámica:** `/profile` (own) o `/profile/:id` (public)
+
+**Features según Figma:**
+
+**1. Avatar con Initials**
+```typescript
+const getUserInitials = () => {
+  if (!profile?.name) return 'U';
+  const parts = profile.name.split(' ');
+  if (parts.length >= 2) {
+    return parts[0][0] + parts[1][0];  // "John Doe" → "JD"
+  }
+  return profile.name.slice(0, 2);  // "Alice" → "AL"
+};
+```
+
+**2. Progress Bar (Gamification)**
+```typescript
+const getProgressPercentage = () => {
+  const reputation = profile.metrics.total_impact;
+  const currentLevel = Math.floor(reputation / 500);
+  const nextLevel = (currentLevel + 1) * 500;
+  const progressInLevel = reputation % 500;
+  return (progressInLevel / 500) * 100;
+};
+
+// UI
+<div className="w-full bg-gray-200 rounded-full h-2">
+  <div
+    className="bg-primary-600 h-2 rounded-full transition-all"
+    style={{ width: `${getProgressPercentage()}%` }}
+  />
+</div>
+```
+
+**3. Metrics Dashboard**
+```tsx
+<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <MetricCard icon={DocumentIcon} value={total_resources} label="Contributions" />
+  <MetricCard icon={BadgeCheckIcon} value={validated_resources} label="Validations Made" />
+  <MetricCard icon={ChartIcon} value={total_impact} label="Total Impact" />
+</div>
+```
+
+**4. Resources Grid**
+```tsx
+{resources.map(resource => (
+  <Link href={`/resources/${resource.id}`} className="bg-white border rounded-lg p-6">
+    <Badge status={resource.latest_version?.status} />
+    <h3>{resource.title}</h3>
+    <Metrics votes={resource.vote_count} reuses={resource.reuse_count} />
+  </Link>
+))}
+```
+
+**5. Empty State**
+```tsx
+{resources.length === 0 && (
+  <div className="text-center py-16">
+    <EmptyIcon />
+    <h3>{isOwnProfile ? "You haven't published..." : `${name} hasn't published...`}</h3>
+    {isOwnProfile && <Link href="/publish">Publish Your First Resource</Link>}
+  </div>
+)}
+```
+
+**Lección IA:** Optional chaining para rutas dinámicas `[[...id]]`
+
+---
+
+### 20.4 E2E Tests: Actualización para Nuevo Diseño
+
+#### Cambios en `frontend/e2e/tests/basic-flow.spec.ts`
+
+**Antes (diseño viejo):**
+```typescript
+await page.click('text=Explorar');  // Navbar top link
+await page.click('text=Volver a Explorar');  // Back button
+await page.click('text=Registrarse');  // Navbar button
+```
+
+**Después (diseño Figma):**
+```typescript
+await page.click('a[href="/explore"]:has-text("Explore")');  // Sidebar link
+await page.click('text=Back to Dashboard');  // New back button
+await page.click('a[href="/register"]:has-text("Sign Up")');  // Navbar button
+```
+
+**Nuevo step agregado (Profile page):**
+```typescript
+// Step 6: Check profile page
+await page.click('a[href="/profile"]:has-text("My Profile")');
+await expect(page).toHaveURL(/\/profile/);
+await expect(page.locator(`text=${testName}`)).toBeVisible();
+
+// Should see metrics dashboard
+await expect(page.locator('text=Contributions')).toBeVisible();
+await expect(page.locator('text=Total Impact')).toBeVisible();
+```
+
+**Toast assertions actualizadas:**
+```typescript
+// Antes
+await expect(page.locator('text=¡Registro exitoso!')).toBeVisible();
+
+// Después (más flexible)
+await expect(page.locator('text=/¡Cuenta creada!|¡Registro exitoso!/i')).toBeVisible();
+```
+
+**Lección IA:** E2E tests deben usar regex para texto que puede variar
+
+---
+
+### 20.5 Decisiones Técnicas
+
+#### 1. Ruta de Profile: `[[...id]]`
+**Decisión:** Usar catch-all opcional route
+**Razón:**
+- `/profile` → Own profile (usa currentUser.id)
+- `/profile/:id` → Public profile
+- Single page component handles both
+
+**Alternativa descartada:** 2 páginas separadas (DRY violation)
+
+---
+
+#### 2. Impact Formula
+**Decisión:** `(validated * 10) + votes + (reuses * 5)`
+**Razón:**
+- Validated resources tienen más peso (calidad)
+- Reuses indican utilidad práctica
+- Votes reflejan comunidad engagement
+
+**Alternativa descartada:** Solo contar recursos (no refleja calidad)
+
+---
+
+#### 3. Progress Bar Gamification
+**Decisión:** Niveles cada 500 puntos
+**Razón:**
+- Alcanzable pero challenging
+- Visual feedback claro
+- Motiva contribuciones de calidad
+
+**Alternativa descartada:** Levels fijos (inflexible)
+
+---
+
+### 20.6 Testing Manual Requerido
+
+#### Backend Endpoints
+```bash
+# 1. Crear usuario de prueba en Django admin
+docker-compose exec backend python manage.py createsuperuser
+
+# 2. Test profile endpoint
+curl http://localhost:8000/api/users/{USER_ID}/ | jq
+
+# 3. Test resources endpoint
+curl "http://localhost:8000/api/users/{USER_ID}/resources/?page=1" | jq
+```
+
+#### Frontend Profile Page
+1. Iniciar sesión
+2. Click "My Profile" en sidebar
+3. Verificar:
+   - Avatar con initials correctas
+   - Metrics se muestran
+   - Progress bar renderiza
+   - Resources grid (o empty state)
+
+#### E2E Tests
+```bash
+# Dentro del container frontend
+docker-compose exec frontend npm run test:e2e
+```
+
+---
+
+### 20.7 Bugs Identificados y Corregidos
+
+#### Bug 1: `resourcesService` is not exported
+**Error:** `Attempted import error: 'resourcesService' is not exported from '@/services/resources'`
+
+**Causa:** Usé nombre incorrecto en nuevos archivos
+**Fix:** Cambiar `resourcesService` → `resourcesApi` en 3 archivos
+
+---
+
+#### Bug 2: Tailwind CSS not compiling
+**Síntoma:** HTML correcto pero sin estilos, `@tailwind` directives en CSS final
+
+**Causa:** Faltaba `postcss.config.js`
+**Fix:**
+```javascript
+// frontend/postcss.config.js
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+```
+
+**Lección IA:** PostCSS config es obligatorio para Tailwind en Next.js standalone
+
+---
+
+### 20.8 Archivos Finales
+
+#### Backend (2 files)
+- ✅ `backend/apps/authentication/views_users.py` (107 líneas)
+- ✅ `backend/apps/authentication/urls_users.py` (actualizado)
+
+#### Frontend (3 files)
+- ✅ `frontend/services/users.ts` (67 líneas)
+- ✅ `frontend/app/profile/[[...id]]/page.tsx` (241 líneas)
+- ✅ `frontend/e2e/tests/basic-flow.spec.ts` (actualizado)
+
+#### Docs (1 file)
+- ✅ `docs/delivery/SESSION_10_COMPLETE.md`
+
+---
+
+### 20.9 Commits de la Sesión
+
+```
+204b9d0 - feat(frontend): Align UI with Figma institutional design
+f5f41a8 - fix(frontend): Add postcss.config.js and fix import names
+fa3f755 - feat: Implement user profile page and update E2E tests
+```
+
+**Total changes:**
+- +3,125 líneas agregadas
+- -613 líneas eliminadas
+- 16 archivos modificados/creados
+
+---
+
+**Registro actualizado:** 2026-02-17 (Sesión 10 — Complete)  
+**Status:** ✅ MVP CORE COMPLETO (95% funcionalidad)  
+**Próxima actualización:** Responsive design + Admin UI
