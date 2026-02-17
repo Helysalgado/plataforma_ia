@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { resourcesService } from '@/services/resources';
+import { resourcesApi } from '@/services/resources';
 import { VoteButton } from '@/components/VoteButton';
 import { ForkButton } from '@/components/ForkButton';
 import type { Resource } from '@/types/api';
@@ -41,7 +41,7 @@ export default function ResourceDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await resourcesService.get(resourceId);
+      const data = await resourcesApi.get(resourceId);
       setResource(data);
     } catch (err) {
       console.error('Error fetching resource:', err);

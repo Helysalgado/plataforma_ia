@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { resourcesService } from '@/services/resources';
+import { resourcesApi } from '@/services/resources';
 import type { Resource } from '@/types/api';
 
 export default function HomePage() {
@@ -29,7 +29,7 @@ export default function HomePage() {
     try {
       setLoading(true);
       // Get first page of validated resources (sorted by votes)
-      const response = await resourcesService.list({
+      const response = await resourcesApi.list({
         page: 1,
         page_size: 6,
         status: 'Validated',

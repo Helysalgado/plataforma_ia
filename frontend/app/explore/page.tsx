@@ -14,7 +14,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { resourcesService } from '@/services/resources';
+import { resourcesApi } from '@/services/resources';
 import type { Resource } from '@/types/api';
 
 export default function ExplorePage() {
@@ -38,7 +38,7 @@ export default function ExplorePage() {
       const searchQuery = searchParams.get('search');
       
       // Load featured (validated)
-      const featuredResponse = await resourcesService.list({
+      const featuredResponse = await resourcesApi.list({
         page: 1,
         page_size: 4,
         status: 'Validated',
@@ -48,7 +48,7 @@ export default function ExplorePage() {
       setFeaturedResources(featuredResponse.results);
 
       // Load new resources
-      const newResponse = await resourcesService.list({
+      const newResponse = await resourcesApi.list({
         page: 1,
         page_size: 8,
         ordering: '-created_at',
@@ -57,7 +57,7 @@ export default function ExplorePage() {
       setNewResources(newResponse.results);
 
       // Load requesting validation
-      const pendingResponse = await resourcesService.list({
+      const pendingResponse = await resourcesApi.list({
         page: 1,
         page_size: 4,
         status: 'Pending Validation',
