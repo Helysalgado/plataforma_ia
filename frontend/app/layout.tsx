@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { Sidebar } from '@/components/Sidebar'
 import { Navbar } from '@/components/Navbar'
 import { Toaster } from 'react-hot-toast'
 
@@ -21,8 +22,14 @@ export default function RootLayout({
     <html lang="es">
       <body className={inter.className}>
         <AuthProvider>
-          <Navbar />
-          {children}
+          {/* Sidebar + Content Layout (Figma design) */}
+          <div className="flex min-h-screen bg-gray-50">
+            <Sidebar />
+            <div className="flex-1 ml-64">
+              <Navbar />
+              <main>{children}</main>
+            </div>
+          </div>
           <Toaster
             position="top-right"
             toastOptions={{
@@ -34,7 +41,7 @@ export default function RootLayout({
               success: {
                 duration: 3000,
                 iconTheme: {
-                  primary: '#10b981',
+                  primary: '#22c55e',
                   secondary: '#fff',
                 },
               },

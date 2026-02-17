@@ -7,21 +7,27 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Brand colors (TODO: adjust to CCG branding)
+        // BioAI Hub Brand Colors (based on Figma designs)
         primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          500: '#3b50a6',
+          600: '#2e4b8e',
+          700: '#1e3a8a',
+          800: '#1e3a8a',
+          900: '#1a237e',
         },
         secondary: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
+          50: '#f0fdf4',
+          100: '#dcfce7',
+          500: '#22c55e',
+          600: '#16a34a',
+          700: '#15803d',
         },
+        // Semantic colors
+        validated: '#22c55e',    // Green for validated badge
+        sandbox: '#94a3b8',      // Gray for sandbox badge
+        pending: '#f59e0b',      // Amber for pending validation
       },
     },
   },
