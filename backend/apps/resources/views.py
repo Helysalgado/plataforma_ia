@@ -21,6 +21,7 @@ from apps.resources.serializers import (
     CreateResourceSerializer,
     ValidateResourceSerializer,
     ForkResourceSerializer,
+    VersionHistorySerializer,
 )
 
 
@@ -275,6 +276,49 @@ class ResourceForkView(APIView):
             elif 'no versions' in error_message.lower():
                 status_code = status.HTTP_400_BAD_REQUEST
                 error_code = 'NO_VERSIONS'
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST
+                error_code = 'BUSINESS_ERROR'
+            
+            return Response(
+                {'error': error_message, 'error_code': error_code},
+                status=status_code
+            )
+
+
+class VersionHistoryView(APIView):
+    """
+    Get version history for a resource.
+    
+    GET /api/resources/{id}/versions/
+    
+    Returns all versions ordered by creation date (newest first).
+    Public endpoint (no authentication required).
+    
+    US-22: Historial de Versiones
+    """
+    
+    permission_classes = []  # Public
+    
+    def get(self, request, resource_id):
+        try:
+            versions = ResourceService.get_version_history(resource_id)
+            
+            # Serialize versions
+            serializer = VersionHistorySerializer(versions, many=True)
+            
+            return Response({
+                'resource_id': resource_id,
+                'count': versions.count(),
+                'versions': serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        except ValueError as e:
+            error_message = str(e)
+            
+            if 'not found' in error_message.lower() or 'deleted' in error_message.lower():
+                status_code = status.HTTP_404_NOT_FOUND
+                error_code = 'RESOURCE_NOT_FOUND'
             else:
                 status_code = status.HTTP_400_BAD_REQUEST
                 error_code = 'BUSINESS_ERROR'

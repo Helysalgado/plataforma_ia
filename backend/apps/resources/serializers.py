@@ -183,3 +183,26 @@ class ForkResourceSerializer(serializers.Serializer):
     forked_resource_id = serializers.UUIDField()
     original_resource_id = serializers.UUIDField()
     derived_from_version = serializers.CharField()
+
+
+class VersionHistorySerializer(serializers.Serializer):
+    """
+    Serializer for version history list.
+    
+    US-22: Historial de Versiones
+    """
+    
+    id = serializers.UUIDField()
+    version_number = serializers.CharField()
+    title = serializers.CharField()
+    status = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    validated_at = serializers.DateTimeField(allow_null=True)
+    is_latest = serializers.BooleanField()
+    
+    # Summary fields (not full content)
+    type = serializers.CharField()
+    tags = serializers.ListField(child=serializers.CharField())
+    
+    # PID
+    pid = serializers.CharField()

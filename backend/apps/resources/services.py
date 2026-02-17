@@ -271,4 +271,34 @@ class ResourceService:
         original_resource.save(update_fields=['forks_count', 'updated_at'])
         
         return forked_resource
+    
+    @staticmethod
+    def get_version_history(resource_id):
+        """
+        Get version history for a resource.
+        
+        Returns all versions ordered by creation date (newest first).
+        Includes metadata for each version (author, date, status, changes).
+        
+        Args:
+            resource_id (UUID): The resource ID
+        
+        Returns:
+            QuerySet: ResourceVersion queryset
+        
+        Raises:
+            ValueError: If resource doesn't exist or is deleted
+        
+        US-22: Historial de Versiones
+        """
+        try:
+            resource = Resource.objects.get(
+                id=resource_id,
+                deleted_at__isnull=True
+            )
+        except Resource.DoesNotExist:
+            raise ValueError('Resource not found or has been deleted')
+        
+        # Return all versions ordered by created_at (newest first)
+        return resource.versions.select_related('resource__owner').order_by('-created_at')
 
