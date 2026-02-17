@@ -166,21 +166,64 @@ make reset-db         # Reset completo de BD
 ### Producto
 - [PRD Refined](docs/product/PRD_REFINED.md) — Requisitos funcionales detallados
 - [Roadmap](docs/product/ROADMAP.md) — Fases MVP → Expansión → Inteligencia
-- [Épicas y Historias](docs/product/EPICS_AND_STORIES.md) — 10 historias Must-Have
+- [Épicas y Historias](docs/product/EPICS_AND_STORIES.md) — 20 historias de usuario
 - [Flujo E2E Prioritario](docs/product/E2E_PRIORITY_FLOW.md) — Journey del usuario
+- [Product Brief](docs/product/PRODUCT_BRIEF.md) — Resumen ejecutivo
+
+### Historias de Usuario
+
+El proyecto está organizado en **épicas** e **historias de usuario** con criterios de aceptación en formato Given/When/Then:
+
+**Must-Have (Flujo E2E Prioritario)**:
+- [US-01](docs/product/EPICS_AND_STORIES.md#us-01): Registro de Usuario
+- [US-02](docs/product/EPICS_AND_STORIES.md#us-02): Login de Usuario
+- [US-05](docs/product/EPICS_AND_STORIES.md#us-05): Explorar Recursos
+- [US-08](docs/product/EPICS_AND_STORIES.md#us-08): Publicar Recurso
+- [US-13](docs/product/EPICS_AND_STORIES.md#us-13): Validar Recurso (Admin)
+- [US-16](docs/product/EPICS_AND_STORIES.md#us-16): Votar Recurso
+- [US-17](docs/product/EPICS_AND_STORIES.md#us-17): Fork de Recurso
+- [US-18](docs/product/EPICS_AND_STORIES.md#us-18): Notificaciones
+- [US-22](docs/product/EPICS_AND_STORIES.md#us-22): Ver Perfil de Usuario
+
+Ver documento completo: [`docs/product/EPICS_AND_STORIES.md`](docs/product/EPICS_AND_STORIES.md)
 
 ### Arquitectura
 - [Arquitectura General](docs/architecture/ARCHITECTURE.md) — Diseño de alto nivel
 - [ADR-001: Autenticación JWT](docs/architecture/ADR-001-authentication.md)
 - [ADR-002: Versionado de Recursos](docs/architecture/ADR-002-versioning.md)
 - [ADR-003: RBAC](docs/architecture/ADR-003-rbac.md)
+- [Diagrama de Arquitectura](docs/architecture/diagrams/architecture.mmd) — Mermaid
 
-### Datos
-- [Modelo de Datos](docs/data/DATA_MODEL.md) — Schema PostgreSQL completo
-- [ERD (Mermaid)](docs/data/diagrams/er.mmd) — Diagrama de entidades
+### Modelo de Datos
+- [Modelo de Datos](docs/data/DATA_MODEL.md) — Schema PostgreSQL completo (8 entidades)
+- [ERD (Mermaid)](docs/data/diagrams/er.mmd) — Diagrama de entidades y relaciones
+
+**Entidades principales**:
+- `users` — Usuarios con roles (Admin, User)
+- `resources` — Wrapper de recursos (owner, derivation tracking)
+- `resource_versions` — Contenido versionado (snapshot + changelog)
+- `votes` — Votos de usuarios (one-per-user constraint)
+- `notifications` — Notificaciones in-app
+- `roles` — Roles y permisos (RBAC)
+
+Ver schema completo: [`docs/data/DATA_MODEL.md`](docs/data/DATA_MODEL.md)
 
 ### API
 - [OpenAPI Spec](docs/api/openapi.yaml) — Especificación completa de endpoints
+
+**Endpoints principales**:
+- `POST /api/auth/register` — Registro de usuario
+- `POST /api/auth/login` — Login (JWT)
+- `GET /api/resources/` — Listar recursos (con filtros)
+- `POST /api/resources/` — Publicar recurso
+- `GET /api/resources/:id/` — Detalle de recurso
+- `POST /api/resources/:id/vote/` — Votar recurso
+- `POST /api/resources/:id/fork/` — Hacer fork
+- `POST /api/resources/:id/validate/` — Validar (admin)
+- `GET /api/users/:id/` — Perfil de usuario
+- `GET /api/notifications/` — Listar notificaciones
+
+Ver documentación completa: [`docs/api/openapi.yaml`](docs/api/openapi.yaml)
 
 ### Calidad
 - [Estrategia de Testing](docs/quality/TEST_STRATEGY.md) — Pirámide de tests
@@ -190,6 +233,16 @@ make reset-db         # Reset completo de BD
 ### UX
 - [Flujo de Navegación](docs/ux/NAVIGATION_FLOW.md) — User flows por rol
 - [Estados UI](docs/ux/UI_STATES.md) — 50+ estados por pantalla
+- [Diseños Figma](docs/ux/figma/) — Prototipos de 5 pantallas principales
+
+### Usuario
+- [Manual de Usuario](docs/user/USER_MANUAL.md) — Guía completa (400+ líneas)
+- [Quick Start Guide](docs/user/QUICK_START_GUIDE.md) — Guía rápida de 10 minutos
+
+### Entrega
+- [Resumen de Entrega Parcial](docs/delivery/PARTIAL_DELIVERY_SUMMARY.md) — Estado del proyecto
+- [Session Summaries](docs/delivery/) — 11 sesiones documentadas
+- [Next Steps](NEXT_STEPS.md) — Roadmap para siguiente fase
 
 ---
 
@@ -326,6 +379,94 @@ factory-boy==3.3+
 
 ---
 
+## 🎫 Tickets y Pull Requests
+
+### Sistema de Trazabilidad
+
+El proyecto usa **GitHub Issues** como sistema de tickets con trazabilidad completa:
+
+**Convenciones de IDs**:
+- Épicas: `EPIC-01`, `EPIC-02`, ...
+- Historias: `US-01`, `US-02`, ...
+- Tickets: `T-001`, `T-002`, ... (GitHub Issues)
+- ADRs: `ADR-001`, `ADR-002`, ...
+
+**Formato de Issue (Ticket)**:
+```markdown
+Título: T-001 — Implementar registro de usuario
+
+User Story: US-01
+Área: Backend
+Módulo: apps/authentication
+Impacto: Habilita autenticación en la plataforma
+
+Checklist:
+- [ ] Modelo User creado
+- [ ] Tests escritos
+- [ ] Endpoint implementado
+- [ ] Documentación actualizada
+```
+
+**Trazabilidad obligatoria**:
+- Cada historia `US-xx` lista los tickets `T-xxx` que la implementan
+- Cada ticket `T-xxx` referencia la historia `US-xx`
+- Cada commit referencia al menos un ticket: `T-xxx: mensaje`
+- Cada PR referencia tickets y historia
+
+Ver convenciones completas: [`AGENTS.md`](AGENTS.md)
+
+### Pull Requests
+
+**Template de PR**:
+```markdown
+## Descripción
+Implementa US-01: Registro de Usuario
+
+## Tickets
+- T-001: Modelo User
+- T-002: Endpoint de registro
+
+## Cambios
+- Backend: Modelo User, serializer, view
+- Tests: 5 unit tests, 2 integration tests
+- Docs: Actualizado DATA_MODEL.md
+
+## Tests Ejecutados
+- [x] Unit tests (pytest)
+- [x] Integration tests
+- [x] E2E test actualizado
+- [x] Linter pasando
+
+## Checklist
+- [x] Criterios de aceptación cumplidos
+- [x] Tests escritos y pasando
+- [x] Documentación actualizada
+- [x] Code review solicitado
+```
+
+Ver PRs del proyecto: [GitHub Pull Requests](https://github.com/ccg-unam/plataforma_ia/pulls)
+
+### Commits
+
+**Formato convencional**:
+```bash
+T-001: feat(auth): Add user registration endpoint
+T-002: fix(resources): Correct vote count calculation
+T-003: docs: Update API documentation
+T-004: test: Add E2E test for registration flow
+```
+
+**Prefijos**:
+- `feat`: Nueva funcionalidad
+- `fix`: Corrección de bug
+- `docs`: Documentación
+- `test`: Tests
+- `refactor`: Refactorización
+- `style`: Formato de código
+- `chore`: Tareas de mantenimiento
+
+---
+
 ## 🤝 Contribución
 
 ### Workflow
@@ -407,14 +548,65 @@ Más detalles: [`/docs/delivery/RELEASE_PLAN.md`](docs/delivery/RELEASE_PLAN.md)
 
 ---
 
+## 🤖 Uso de IA en el Desarrollo
+
+Este proyecto fue desarrollado con asistencia de **IA (Claude Sonnet 4.5)** siguiendo principios de transparencia y trazabilidad.
+
+### Documentación de IA
+
+- **[PROMPTS.md](PROMPTS.md)** — Prompts clave utilizados (resumen ejecutivo)
+- **[AI_USAGE_LOG.md](docs/ai/AI_USAGE_LOG.md)** — Log completo de uso de IA (4,200+ líneas)
+
+### Artefactos Generados por IA
+
+**Documentación** (12,000+ líneas):
+- Especificaciones de producto (PRD, épicas, historias)
+- Arquitectura y ADRs
+- Modelo de datos y ERD
+- Estrategia de testing
+- Manuales de usuario
+
+**Código** (13,000+ líneas):
+- Backend: Django models, views, serializers
+- Frontend: Next.js pages, components
+- Tests: Unit, integration, E2E
+- Configuración: Docker, CI/CD
+
+**Diagramas** (10+ diagramas):
+- Arquitectura (Mermaid)
+- ERD (Mermaid)
+- Flujos de usuario (Mermaid)
+
+### Metodología
+
+1. **Prompts estructurados**: Uso de protocolos en [`/orchestration`](orchestration/)
+2. **Iteración guiada**: Revisión humana y refinamiento
+3. **TDD**: Tests escritos antes del código
+4. **Documentación obligatoria**: Cada sesión documentada
+
+### Estadísticas
+
+- **Sesiones documentadas**: 11
+- **Prompts clave**: 50+
+- **Ajustes humanos**: ~15% del código
+- **Tiempo ahorrado**: ~73% (estimado)
+
+Ver detalles completos: [`PROMPTS.md`](PROMPTS.md)
+
+---
+
 ## 🔗 Enlaces Útiles
 
 - **Documentación completa:** [`/docs`](docs/)
 - **Protocolo de desarrollo:** [`/orchestration/ORCHESTRATOR_MASTER.md`](orchestration/ORCHESTRATOR_MASTER.md)
 - **Convenciones:** [`AGENTS.md`](AGENTS.md)
 - **Issues/Tickets:** [GitHub Issues](https://github.com/ccg-unam/plataforma_ia/issues)
+- **Prompts de IA:** [`PROMPTS.md`](PROMPTS.md)
+- **Manuales de usuario:** [`docs/user/`](docs/user/)
 
 ---
 
-**Última actualización:** 2026-02-16  
-**Versión README:** 1.0
+**Última actualización:** 2026-02-17  
+**Versión README:** 1.1  
+**Estado:** MVP Core completado (85%)  
+**Próxima entrega:** Ver [`NEXT_STEPS.md`](NEXT_STEPS.md)
