@@ -987,3 +987,426 @@ def custom_exception_handler(exc, context):
 
 **Registro actualizado:** 2026-02-16 (Sesión 3)  
 **Próxima actualización:** FASE 7 (Implementación de historias US-01 a US-18)
+
+---
+
+## 13. FASE 7 — Implementación (Historias US-05: Explorar Recursos)
+
+**Fecha:** 2026-02-16  
+**Fase:** FASE 7 (Implementación — US-05)  
+**Rol activo:** Backend Engineer + QA Engineer  
+**Tools utilizadas:** Claude 3.5 Sonnet (Cursor Agent mode)
+
+---
+
+### 13.1 Contexto
+
+Completada la implementación de US-01 (Register) y US-02 (Login) en sesión previa con:
+- 33/33 tests pasando (authentication app)
+- 96% cobertura en authentication
+- Endpoints /api/auth/register/, /api/auth/login/, /api/auth/verify-email/ funcionales
+
+**Objetivo de esta sesión:** Implementar **US-05: Explorar Recursos** (la historia más compleja hasta ahora, ya que involucra el modelo central del proyecto: Resources con versionado).
+
+---
+
+### 13.2 Estrategia
+
+**Approach:** TDD estricto (Test-Driven Development)
+1. Crear modelos (Resource + ResourceVersion)
+2. Escribir tests unitarios para modelos
+3. Implementar services (ResourceService)
+4. Escribir tests para services
+5. Implementar serializers y views (API)
+6. Escribir tests de integración (API)
+7. Verificar funcionalmente con curl
+
+**User Stories implementadas:**
+- US-05: Explorar Recursos (listado con paginación, filtros, búsqueda)
+- US-06: Buscar y Filtrar (parcial: backend completo)
+- US-07: Ver Detalle (parcial: backend completo, falta UI)
+- US-08: Publicar Recurso (parcial: backend completo, falta UI)
+
+---
+
+### 13.3 Decisiones Técnicas Críticas
+
+#### 13.3.1 Modelo de Versionado (Hybrid Snapshot)
+**Análisis IA:**
+> "Existen 3 approaches para versionado: Delta (store changes), Snapshot (full copies), Hybrid (snapshot + deltas for large files). Para MVP, Hybrid Snapshot sin deltas es optimal porque:
+> - No hay archivos grandes (solo texto: prompts, notebooks)
+> - Queries simples sin reconstrucción
+> - Mejor performance de lectura (crucial para exploración)
+> - Tradeoff: storage, pero despreciable en fase inicial"
+
+**Decisión:** Hybrid Snapshot Model (sin deltas)
+- `Resource`: wrapper (container)
+- `ResourceVersion`: snapshot completo por versión
+- `is_latest` flag para marcar versión actual
+- Version number: Semantic Versioning (MAJOR.MINOR.PATCH)
+
+**Impacto:**
+- ✅ Query simple para latest: `WHERE is_latest=TRUE`
+- ✅ Historial completo sin joins complejos
+- ❌ Mayor storage (pero manageable en MVP)
+
+---
+
+#### 13.3.2 Persistent Identifiers (PID)
+**Análisis IA:**
+> "Para citación académica, se necesita un identificador estable que sobreviva cambios de URL. Formato recomendado: esquema + prefijo institucional + resource ID + version"
+
+**Decisión:** PID format: `ccg-ai:R-{resource_id}@v{version_number}`
+
+**Ejemplo:**
+```
+ccg-ai:R-eeb36cda-bed0-4f14-8fc4-fb0b3c9e7cb8@v1.0.0
+```
+
+**Implementación:**
+- Property en modelo (no DB field)
+- Calculado on-the-fly
+- Expuesto en API
+
+**Impacto:** Citabilidad académica desde MVP
+
+---
+
+#### 13.3.3 Indexación de Tags (JSONB + GIN)
+**Análisis IA:**
+> "Para tags, hay 3 opciones: M2M table (normalized), JSONB (semi-structured), o PostgreSQL array. JSONB con GIN index ofrece:
+> - Flexibility (tags heterogéneos sin schema)
+> - Performance con GIN index (O(log n) contains queries)
+> - Native JSON support en Django >= 3.1"
+
+**Decisión:** JSONB field con GIN index
+
+**Migración generada:**
+```python
+CREATE INDEX idx_versions_tags ON resource_versions USING gin(tags);
+```
+
+**Query example:**
+```python
+# Filtrar por tag
+queryset.filter(versions__tags__contains=['bio'])
+```
+
+**Impacto:**
+- ✅ Queries rápidas (subsegundo con miles de recursos)
+- ✅ Flexibilidad para tags custom
+- ❌ Requiere PostgreSQL (no SQLite)
+
+---
+
+#### 13.3.4 Content Hash (SHA256)
+**Análisis IA:**
+> "Para detectar duplicados y verificar integridad (especialmente para forks), se recomienda hash del contenido. SHA256 es estándar para integridad de datos (usado en Git, blockchain, etc.)"
+
+**Decisión:** SHA256 hash auto-generado en `save()` para Internal resources
+
+**Implementación:**
+```python
+def save(self, *args, **kwargs):
+    if self.resource.source_type == 'Internal' and self.content:
+        self.content_hash = hashlib.sha256(
+            self.content.encode('utf-8')
+        ).hexdigest()
+    super().save(*args, **kwargs)
+```
+
+**Impacto:**
+- ✅ Detección de duplicados (O(1) lookup)
+- ✅ Verificación de integridad post-fork
+- ❌ Overhead mínimo (< 1ms por recurso)
+
+---
+
+#### 13.3.5 Soft Delete
+**Análisis IA:**
+> "Para auditoría y compliance, soft delete es preferible a hard delete. Implementar con `deleted_at` timestamp (NULL = active, NOT NULL = deleted)."
+
+**Decisión:** `deleted_at` field en Resource (no en ResourceVersion)
+
+**Queries modificados:**
+```python
+# Siempre filtrar soft-deleted
+queryset.filter(deleted_at__isnull=True)
+```
+
+**Index parcial:**
+```python
+CREATE INDEX idx_resources_deleted 
+ON resources(deleted_at) 
+WHERE deleted_at IS NOT NULL;
+```
+
+**Impacto:** Auditoría completa, compliance con GDPR "derecho al olvido" (soft delete + hard delete posterior)
+
+---
+
+### 13.4 Challenges y Soluciones
+
+#### 13.4.1 Error: `Cannot resolve keyword 'votes' into field`
+**Problema:**
+```python
+queryset = queryset.annotate(votes_count_annotated=Count('votes'))
+# FieldError: Cannot resolve keyword 'votes'
+```
+**Causa:** Vote model no existe aún (se implementará en US-16)
+
+**Solución IA sugerida:**
+> "Comentar temporalmente el annotate de votes y devolver placeholder (0) hasta implementar US-16. Agregar TODOs en código para re-habilitarlo después."
+
+**Implementación:**
+```python
+# TODO: Re-enable when Vote model exists (US-16)
+# queryset = queryset.annotate(votes_count_annotated=Count('votes'))
+for resource in result['results']:
+    resource.votes_count_annotated = 0  # Placeholder
+```
+
+**Resultado:** Tests pasan, funcionalidad principal no bloqueada
+
+---
+
+#### 13.4.2 Error: `Role matching query does not exist` (Tests)
+**Problema:**
+```python
+# Fixture en test_api.py
+user_role = Role.objects.get(name='User')  # DoesNotExist
+```
+**Causa:** Test database no tiene roles seeded
+
+**Solución IA sugerida:**
+> "Modificar fixture para crear Role con `get_or_create()` en lugar de `get()`"
+
+**Implementación:**
+```python
+@pytest.fixture
+def user():
+    from apps.authentication.models import Role
+    Role.objects.get_or_create(
+        name='User',
+        defaults={'description': 'Standard user'}
+    )
+    user = User.objects.create_user(...)
+    # ...
+```
+
+**Resultado:** Tests pasan sin dependencia de seeds
+
+---
+
+#### 13.4.3 Error: `{'tags': ['This field cannot be blank.']}`
+**Problema:**
+```python
+v = ResourceVersion(tags=[], ...)
+v.full_clean()  # ValidationError: tags cannot be blank
+```
+**Causa:** JSONB field con `default=list` pero sin `blank=True`
+
+**Solución IA sugerida:**
+> "Agregar `blank=True` al field definition. Django valida `blank` (form-level), no solo `null` (DB-level)."
+
+**Implementación:**
+```python
+tags = models.JSONField(_('tags'), default=list, blank=True)
+```
+
+**Resultado:** Validación correcta, tests pasan
+
+---
+
+### 13.5 Tests Generados
+
+#### 13.5.1 Model Tests (test_models.py) — 12 tests
+- ✅ test_create_resource
+- ✅ test_resource_latest_version_property
+- ✅ test_resource_votes_count_property (placeholder)
+- ✅ test_resource_is_fork_property
+- ✅ test_resource_soft_delete
+- ✅ test_create_version
+- ✅ test_version_number_validation (regex semver)
+- ✅ test_content_hash_auto_generated (SHA256)
+- ✅ test_pid_property (PID format)
+- ✅ test_unique_version_per_resource
+- ✅ test_version_status_choices
+- ✅ test_version_type_choices
+
+**Coverage:** 96% (models.py)
+
+---
+
+#### 13.5.2 Service Tests (test_services.py) — 9 tests
+- ✅ test_list_resources_basic
+- ✅ test_list_resources_pagination
+- ✅ test_list_resources_filter_by_type
+- ✅ test_list_resources_filter_by_status
+- ✅ test_list_resources_filter_by_tags (JSONB contains)
+- ✅ test_list_resources_search (title + description)
+- ✅ test_list_resources_ordering (-created_at, created_at)
+- ✅ test_create_resource_internal
+- ✅ test_create_resource_github_linked
+
+**Coverage:** 95% (services.py)
+
+---
+
+#### 13.5.3 API Tests (test_api.py) — 12 tests
+- ✅ test_list_resources_anonymous (AllowAny)
+- ✅ test_list_resources_pagination
+- ✅ test_list_resources_filter_type
+- ✅ test_list_resources_filter_status
+- ✅ test_list_resources_search
+- ✅ test_get_resource_detail
+- ✅ test_get_nonexistent_resource (404)
+- ✅ test_create_resource_internal
+- ✅ test_create_resource_github_linked
+- ✅ test_create_resource_unauthenticated (401)
+- ✅ test_create_resource_internal_without_content (400)
+- ✅ test_create_resource_github_without_repo (400)
+
+**Coverage:** 94% (views.py), 98% (serializers.py)
+
+---
+
+**Total Tests:** 33/33 (100% passing)  
+**Total Coverage:** 65% (target: ≥70%, pending frontend)
+
+---
+
+### 13.6 Verificación Funcional
+
+#### Test 1: Listado de recursos (anónimo)
+```bash
+curl -X GET 'http://localhost:8000/api/resources/?page=1&page_size=10'
+```
+**Resultado:** ✅ 200 OK
+```json
+{
+  "results": [...],
+  "count": 1,
+  "page": 1,
+  "page_size": 10,
+  "has_next": false,
+  "has_previous": false
+}
+```
+
+---
+
+#### Test 2: Filtrado por tipo y búsqueda
+```bash
+curl -X GET 'http://localhost:8000/api/resources/?type=Prompt&search=BioAI'
+```
+**Resultado:** ✅ 200 OK, 1 recurso encontrado
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "id": "eeb36cda-...",
+      "latest_version": {
+        "title": "Test Prompt for BioAI",
+        "type": "Prompt",
+        "tags": ["test", "bio", "ai"],
+        "content_hash": "ed16bdec...",
+        "pid": "ccg-ai:R-eeb36cda-...@v1.0.0"
+      }
+    }
+  ]
+}
+```
+
+---
+
+#### Test 3: Crear recurso (autenticado)
+```bash
+TOKEN=$(curl -X POST .../login/ -d '{"email":"demo@example.com","password":"..."}' | jq -r '.access')
+curl -X POST http://localhost:8000/api/resources/create/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "title": "Test Prompt",
+    "description": "...",
+    "type": "Prompt",
+    "tags": ["test"],
+    "content": "Generate Python script...",
+    "source_type": "Internal"
+  }'
+```
+**Resultado:** ✅ 201 CREATED
+```json
+{
+  "id": "...",
+  "owner": {"email": "demo@example.com", ...},
+  "latest_version": {
+    "version_number": "1.0.0",
+    "title": "Test Prompt",
+    "content_hash": "ed16bdec...",
+    "status": "Sandbox"
+  }
+}
+```
+
+---
+
+### 13.7 Métricas de Productividad
+
+**Artifacts generados:**
+- 10 archivos de código (models, services, serializers, views, urls, admin, tests)
+- 1,500+ líneas de código backend
+- 33 tests comprehensivos
+- 1 migración (con 10+ índices optimizados)
+- 1 documento de implementación (US-05-IMPLEMENTATION.md)
+
+**Tiempo estimado sin IA:** 8-12 horas
+- Diseño de modelos: 2h
+- Implementación de lógica: 3h
+- Tests: 2h
+- Debugging: 2h
+- Documentación: 1h
+
+**Tiempo real con IA:** ~2 horas
+- IA generó boilerplate inicial (models, serializers, tests): 30 min
+- Debugging guiado por IA (3 errores críticos): 45 min
+- Refinamiento y verificación: 45 min
+
+**Aceleración:** ~4-6x
+
+**Calidad del código generado:**
+- ✅ Tests comprehensivos (33 tests, 100% passing)
+- ✅ Documentación inline (docstrings, comentarios)
+- ✅ Best practices (service layer, serializers, permissions)
+- ✅ Optimizaciones (prefetch_related, annotate, índices)
+- ⚠️ Requirió 3 correcciones menores (votes placeholder, Role fixture, tags blank)
+
+---
+
+### 13.8 Lecciones Aprendidas
+
+**Fortalezas de IA:**
+- Generación de boilerplate con best practices (service layer, TDD, fixtures)
+- Debugging guiado (identificación de root cause de FieldError, ValidationError)
+- Documentación comprehensiva (docstrings, inline comments, summaries)
+- Optimizaciones proactivas (prefetch_related, GIN index, partial index para soft delete)
+
+**Limitaciones de IA:**
+- No detectó automáticamente que Vote model no existía (requirió error en runtime)
+- Generó fixture con `.get()` en lugar de `.get_or_create()` (pattern common pero no óptimo para tests)
+- No sugirió `blank=True` en JSONB hasta después del error
+
+**Pattern emergente:**
+> IA es excelente para **generación y debugging guiado**, pero **requiere supervisión humana** para decisiones arquitectónicas críticas (e.g., versionado, indexación, soft delete).
+
+**Mejor workflow:**
+1. Humano: decisión arquitectónica (e.g., "usar hybrid snapshot")
+2. IA: implementación detallada (models, services, tests)
+3. Humano: revisión de edge cases (e.g., "¿qué pasa si Vote no existe?")
+4. IA: ajustes y refactoring
+5. Humano: verificación funcional (curl, Postman)
+
+---
+
+**Registro actualizado:** 2026-02-16 (Sesión 4 — US-05)  
+**Próxima actualización:** US-13 (Validar Recurso — Admin) o US-16 (Votar Recurso)

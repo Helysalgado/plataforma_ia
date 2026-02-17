@@ -15,7 +15,7 @@ urlpatterns = [
     # API v1
     path('api/', include([
         path('auth/', include('apps.authentication.urls')),
-        # path('resources/', include('apps.resources.urls')),  # TODO: Implementar US-05
+        path('resources/', include('apps.resources.urls')),  # US-05, US-06, US-07, US-08
         # path('notifications/', include('apps.notifications.urls')),  # TODO: Implementar US-18
         path('users/', include('apps.authentication.urls_users')),
     ])),
