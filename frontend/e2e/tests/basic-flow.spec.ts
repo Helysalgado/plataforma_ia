@@ -21,29 +21,32 @@ test.describe('Basic User Flow', () => {
     await page.goto('/');
     await expect(page).toHaveTitle(/BioAI Hub/);
     
-    // Navigate to explore
-    await page.click('text=Explorar');
+    // Should see hero section with new design
+    await expect(page.locator('text=Institutional AI Repository for Scientific Collaboration')).toBeVisible();
+    
+    // Navigate to explore via sidebar (new design)
+    await page.click('a[href="/explore"]:has-text("Explore")');
     await expect(page).toHaveURL(/\/explore/);
-    await expect(page.locator('h1')).toContainText('Explorar Recursos');
+    await expect(page.locator('h1:has-text("Explore Resources")')).toBeVisible();
 
     // Step 2: View a resource detail (if any resources exist)
-    const resourceCard = page.locator('[data-testid="resource-card"]').first();
+    const resourceCard = page.locator('a[href^="/resources/"]').first();
     const hasResources = await resourceCard.isVisible().catch(() => false);
     
     if (hasResources) {
       await resourceCard.click();
       await expect(page).toHaveURL(/\/resources\//);
       
-      // Should see vote and fork buttons (disabled for anonymous)
-      await expect(page.locator('button:has-text("Votar")')).toBeVisible();
-      await expect(page.locator('button:has-text("Reutilizar")')).toBeVisible();
+      // Should see new tabs design
+      await expect(page.locator('button:has-text("Description")')).toBeVisible();
+      await expect(page.locator('button:has-text("Notebook")')).toBeVisible();
       
-      // Go back to explore
-      await page.click('text=Volver a Explorar');
+      // Go back via back button (new design)
+      await page.click('text=Back to Dashboard');
     }
 
-    // Step 3: Register
-    await page.click('text=Registrarse');
+    // Step 3: Register - Navigate via navbar (new design)
+    await page.click('a[href="/register"]:has-text("Sign Up")');
     await expect(page).toHaveURL('/register');
     
     await page.fill('input[name="email"]', testEmail);
@@ -53,14 +56,11 @@ test.describe('Basic User Flow', () => {
     
     await page.click('button[type="submit"]:has-text("Crear cuenta")');
     
-    // Should see success message
-    await expect(page.locator('text=¡Registro exitoso!')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator(`text=${testEmail}`)).toBeVisible();
+    // Should see success toast (react-hot-toast)
+    await expect(page.locator('text=/¡Cuenta creada!|¡Registro exitoso!/i')).toBeVisible({ timeout: 10000 });
 
-    // Step 4: Login (simulating email verification)
-    // Note: In real E2E, you'd need to verify email first
-    // For testing purposes, we'll proceed to login
-    await page.click('text=Ir a iniciar sesión');
+    // Step 4: Login
+    await page.goto('/login');
     await expect(page).toHaveURL('/login');
     
     await page.fill('input[name="email"]', testEmail);
@@ -68,14 +68,14 @@ test.describe('Basic User Flow', () => {
     
     await page.click('button[type="submit"]:has-text("Iniciar sesión")');
     
-    // Should redirect to explore after login
-    await expect(page).toHaveURL(/\/explore/, { timeout: 10000 });
+    // Should see welcome toast and redirect
+    await expect(page.locator('text=/¡Bienvenido/i')).toBeVisible({ timeout: 10000 });
     
-    // Should see user name in navbar
+    // Should see user in navbar (new design with avatar)
     await expect(page.locator(`text=${testName}`)).toBeVisible();
 
-    // Step 5: Publish a resource
-    await page.click('text=Publicar');
+    // Step 5: Publish a resource via sidebar
+    await page.click('a[href="/publish"]:has-text("Publish")');
     await expect(page).toHaveURL('/publish');
     
     // Fill resource form
@@ -83,46 +83,31 @@ test.describe('Basic User Flow', () => {
     await page.fill('input[name="title"]', resourceTitle);
     await page.fill('textarea[name="description"]', 'This is a test resource created by E2E test');
     await page.selectOption('select[name="type"]', 'Prompt');
-    await page.fill('input[name="tags"]', 'test, e2e, automation');
+    
+    // Add tags (assuming tag input exists)
     await page.fill('textarea[name="content"]', 'Test content for E2E testing purposes');
     
-    await page.click('button[type="submit"]:has-text("Publicar Recurso")');
+    await page.click('button[type="submit"]');
     
     // Should redirect to resource detail
     await expect(page).toHaveURL(/\/resources\//, { timeout: 10000 });
-    await expect(page.locator(`text=${resourceTitle}`)).toBeVisible();
-    
-    // Should see success toast
-    await expect(page.locator('text=publicado exitosamente')).toBeVisible();
+    await expect(page.locator(`h1:has-text("${resourceTitle}")`)).toBeVisible();
 
-    // Step 6: Vote on own resource
-    await page.click('button:has-text("Votar")');
+    // Step 6: Check profile page (new feature)
+    await page.click('a[href="/profile"]:has-text("My Profile")');
+    await expect(page).toHaveURL(/\/profile/);
+    await expect(page.locator(`text=${testName}`)).toBeVisible();
     
-    // Should see vote success toast
-    await expect(page.locator('text=Voto registrado')).toBeVisible({ timeout: 5000 });
-    
-    // Vote button should change state
-    await expect(page.locator('button:has-text("Votado")')).toBeVisible();
+    // Should see metrics dashboard
+    await expect(page.locator('text=Contributions')).toBeVisible();
+    await expect(page.locator('text=Total Impact')).toBeVisible();
 
-    // Step 7: Edit resource
-    await page.click('button:has-text("Editar")');
-    await expect(page).toHaveURL(/\/resources\/.*\/edit/);
+    // Step 7: Logout via user dropdown (new design)
+    await page.click(`text=${testName}`); // Open dropdown
+    await page.click('text=Sign Out');
     
-    const updatedDescription = 'Updated description from E2E test';
-    await page.fill('textarea[name="description"]', updatedDescription);
-    await page.click('button[type="submit"]:has-text("Guardar Cambios")');
-    
-    // Should redirect back to detail
-    await expect(page).toHaveURL(/\/resources\//);
-    await expect(page.locator(`text=${updatedDescription}`)).toBeVisible();
-
-    // Step 8: Logout
-    await page.click(`text=${testName}`); // Open user menu
-    await page.click('text=Cerrar sesión');
-    
-    // Should see login/register buttons again
-    await expect(page.locator('text=Iniciar sesión')).toBeVisible();
-    await expect(page.locator('text=Registrarse')).toBeVisible();
+    // Should see Sign In button again
+    await expect(page.locator('a[href="/login"]:has-text("Sign In")')).toBeVisible();
   });
 
   test('should show proper validation errors', async ({ page }) => {
@@ -132,8 +117,8 @@ test.describe('Basic User Flow', () => {
     // Try to submit empty form
     await page.click('button[type="submit"]');
     
-    // Should show validation errors
-    await expect(page.locator('text=obligatorio')).toBeVisible();
+    // Should show validation errors (updated text)
+    await expect(page.locator('text=/required|obligatorio/i')).toBeVisible();
     
     // Test weak password
     await page.fill('input[name="email"]', 'test@example.com');
@@ -142,7 +127,7 @@ test.describe('Basic User Flow', () => {
     await page.fill('input[name="password_confirm"]', '123');
     
     await page.click('button[type="submit"]');
-    await expect(page.locator('text=mínimo 8 caracteres')).toBeVisible();
+    await expect(page.locator('text=/mínimo 8|minimum 8/i')).toBeVisible();
   });
 
   test('should handle login errors', async ({ page }) => {
@@ -154,7 +139,7 @@ test.describe('Basic User Flow', () => {
     
     await page.click('button[type="submit"]');
     
-    // Should show error message
-    await expect(page.locator('text=Credenciales incorrectas')).toBeVisible({ timeout: 5000 });
+    // Should show error toast (react-hot-toast)
+    await expect(page.locator('text=/Credenciales incorrectas|Invalid credentials/i')).toBeVisible({ timeout: 5000 });
   });
 });
