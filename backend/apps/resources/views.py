@@ -20,6 +20,7 @@ from apps.resources.serializers import (
     ResourceDetailSerializer,
     CreateResourceSerializer,
     ValidateResourceSerializer,
+    ForkResourceSerializer,
 )
 
 
@@ -223,6 +224,57 @@ class ResourceValidateView(APIView):
             elif 'already validated' in error_message.lower():
                 status_code = status.HTTP_400_BAD_REQUEST
                 error_code = 'ALREADY_VALIDATED'
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST
+                error_code = 'BUSINESS_ERROR'
+            
+            return Response(
+                {'error': error_message, 'error_code': error_code},
+                status=status_code
+            )
+
+
+class ResourceForkView(APIView):
+    """
+    Fork (reutilizar) a resource.
+    
+    POST /api/resources/{id}/fork/
+    
+    Creates a new resource derived from the original.
+    Only authenticated users can fork resources.
+    
+    US-17: Reutilizar Recurso (Fork)
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, resource_id):
+        try:
+            forked_resource = ResourceService.fork_resource(
+                user=request.user,
+                resource_id=resource_id
+            )
+            
+            response_data = {
+                'message': 'Resource forked successfully',
+                'forked_resource_id': forked_resource.id,
+                'original_resource_id': resource_id,
+                'derived_from_version': forked_resource.derived_from_version.version_number,
+            }
+            
+            serializer = ForkResourceSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        except ValueError as e:
+            error_message = str(e)
+            
+            # Determine appropriate status code
+            if 'not found' in error_message.lower() or 'deleted' in error_message.lower():
+                status_code = status.HTTP_404_NOT_FOUND
+                error_code = 'RESOURCE_NOT_FOUND'
+            elif 'no versions' in error_message.lower():
+                status_code = status.HTTP_400_BAD_REQUEST
+                error_code = 'NO_VERSIONS'
             else:
                 status_code = status.HTTP_400_BAD_REQUEST
                 error_code = 'BUSINESS_ERROR'

@@ -6,6 +6,7 @@ from apps.resources.views import (
     ResourceDetailView,
     ResourceCreateView,
     ResourceValidateView,
+    ResourceForkView,
 )
 from apps.interactions.views import VoteToggleView
 
@@ -15,4 +16,5 @@ urlpatterns = [
     path('<uuid:resource_id>/', ResourceDetailView.as_view(), name='resource-detail'),
     path('<uuid:resource_id>/vote/', VoteToggleView.as_view(), name='vote-toggle'),
     path('<uuid:resource_id>/validate/', ResourceValidateView.as_view(), name='resource-validate'),
+    path('<uuid:resource_id>/fork/', ResourceForkView.as_view(), name='resource-fork'),
 ]

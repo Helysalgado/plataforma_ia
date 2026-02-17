@@ -203,4 +203,72 @@ class ResourceService:
         # )
         
         return resource
+    
+    @staticmethod
+    @transaction.atomic
+    def fork_resource(user, resource_id):
+        """
+        Fork (reutilizar) a resource.
+        
+        Creates a new resource derived from the original:
+        - Copies latest version content
+        - Sets derived_from_resource_id and derived_from_version_id
+        - Increments forks_count on original
+        - New resource owned by user
+        - New version starts at v1.0.0
+        
+        Args:
+            user (User): The user forking the resource
+            resource_id (UUID): The resource ID to fork
+        
+        Returns:
+            Resource: The forked (new) resource
+        
+        Raises:
+            ValueError: If resource doesn't exist, is deleted, or has no versions
+        
+        US-17: Reutilizar Recurso (Fork)
+        """
+        # Get original resource with lock (will increment forks_count)
+        try:
+            original_resource = Resource.objects.select_for_update().get(
+                id=resource_id,
+                deleted_at__isnull=True
+            )
+        except Resource.DoesNotExist:
+            raise ValueError('Resource not found or has been deleted')
+        
+        # Get latest version
+        latest_version = original_resource.latest_version
+        if not latest_version:
+            raise ValueError('Resource has no versions to fork')
+        
+        # Create forked resource
+        forked_resource = Resource.objects.create(
+            owner=user,
+            source_type='Internal',  # Forks are always Internal
+            derived_from_resource=original_resource,
+            derived_from_version=latest_version,
+        )
+        
+        # Copy latest version as v1.0.0
+        ResourceVersion.objects.create(
+            resource=forked_resource,
+            version_number='1.0.0',
+            title=f"{latest_version.title} (Fork)",
+            description=latest_version.description,
+            type=latest_version.type,
+            tags=latest_version.tags.copy() if latest_version.tags else [],
+            content=latest_version.content,
+            # GitHub fields not copied (fork becomes Internal)
+            example=latest_version.example,
+            status='Sandbox',  # Forks start in Sandbox
+            is_latest=True,
+        )
+        
+        # Increment forks_count on original
+        original_resource.forks_count += 1
+        original_resource.save(update_fields=['forks_count', 'updated_at'])
+        
+        return forked_resource
 

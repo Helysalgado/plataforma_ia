@@ -170,3 +170,16 @@ class ValidateResourceSerializer(serializers.Serializer):
     resource_id = serializers.UUIDField()
     status = serializers.CharField()
     validated_at = serializers.DateTimeField()
+
+
+class ForkResourceSerializer(serializers.Serializer):
+    """
+    Serializer for fork resource response.
+    
+    US-17: Reutilizar Recurso (Fork)
+    """
+    
+    message = serializers.CharField()
+    forked_resource_id = serializers.UUIDField()
+    original_resource_id = serializers.UUIDField()
+    derived_from_version = serializers.CharField()
