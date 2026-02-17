@@ -9,8 +9,9 @@ from django.db.models import Count, Sum
 
 from apps.authentication.models import User
 from apps.authentication.serializers import UserSerializer
-from apps.resources.models import Resource
+from apps.resources.models import Resource, ResourceVersion
 from apps.resources.serializers import ResourceListSerializer
+from apps.interactions.models import Vote
 
 
 class UserDetailView(APIView):
@@ -30,18 +31,26 @@ class UserDetailView(APIView):
         resources = Resource.objects.filter(owner=user, deleted_at__isnull=True)
         
         total_resources = resources.count()
-        validated_resources = resources.filter(
-            latest_version__status='Validated'
+        
+        # Count validated resources by checking latest versions
+        validated_resources = ResourceVersion.objects.filter(
+            resource__owner=user,
+            resource__deleted_at__isnull=True,
+            is_latest=True,
+            status='Validated'
         ).count()
         
         # Total votes received across all user's resources
-        total_votes = resources.aggregate(
-            total=Sum('vote_count')
-        )['total'] or 0
+        # Use Vote model to count votes
+        total_votes = Vote.objects.filter(
+            resource__owner=user,
+            resource__deleted_at__isnull=True
+        ).count()
         
         # Total reuses (forks) received
+        # Use forks_count denormalized field
         total_reuses = resources.aggregate(
-            total=Sum('reuse_count')
+            total=Sum('forks_count')
         )['total'] or 0
         
         # Calculate impact (simple formula for MVP)
@@ -83,20 +92,32 @@ class UserResourcesView(APIView):
         page_size = int(request.query_params.get('page_size', 12))
         
         # Base queryset
+        # Note: can't use select_related with 'latest_version' as it's a property, not a FK
         resources = Resource.objects.filter(
             owner=user,
             deleted_at__isnull=True
-        ).select_related('latest_version').order_by('-created_at')
+        ).prefetch_related('versions').order_by('-created_at')
         
         # Filter by status if provided
+        # Note: can't filter by latest_version__status directly, need to do it in Python
         if resource_status:
-            resources = resources.filter(latest_version__status=resource_status)
-        
-        # Pagination
-        total_count = resources.count()
-        start = (page - 1) * page_size
-        end = start + page_size
-        resources = resources[start:end]
+            # Get all resources and filter in Python
+            all_resources = list(resources)
+            resources_filtered = [
+                r for r in all_resources 
+                if r.latest_version and r.latest_version.status == resource_status
+            ]
+            total_count = len(resources_filtered)
+            # Pagination
+            start = (page - 1) * page_size
+            end = start + page_size
+            resources = resources_filtered[start:end]
+        else:
+            # Pagination
+            total_count = resources.count()
+            start = (page - 1) * page_size
+            end = start + page_size
+            resources = resources[start:end]
         
         # Serialize
         serializer = ResourceListSerializer(resources, many=True)

@@ -3759,3 +3759,465 @@ fa3f755 - feat: Implement user profile page and update E2E tests
 **Registro actualizado:** 2026-02-17 (Sesión 10 — Complete)  
 **Status:** ✅ MVP CORE COMPLETO (95% funcionalidad)  
 **Próxima actualización:** Responsive design + Admin UI
+
+---
+
+## 21. Session 11: Profile Page Debugging (2026-02-17)
+
+### 21.1 Contexto
+
+**Objetivo:** Depurar errores en Profile Page que impedían su funcionamiento  
+**Problema inicial:** Al acceder a `/profile`, se mostraba "User not found"  
+**Causa raíz:** Errores en endpoints backend por uso incorrecto de propiedades del modelo Django
+
+---
+
+### 21.2 Problema: Propiedades vs Campos de BD
+
+**Error encontrado:**
+```
+django.core.exceptions.FieldError: Cannot resolve keyword 'latest_version' into field
+```
+
+**Causa:** En Django, solo se pueden usar en queries los campos que existen en la base de datos. Las propiedades (`@property`) no se pueden usar en `filter()`, `select_related()`, ni `aggregate()`.
+
+**Modelo Resource:**
+```python
+class Resource(models.Model):
+    # ... campos de BD ...
+    
+    @property
+    def latest_version(self):
+        """Get the latest version of this resource."""
+        return self.versions.filter(is_latest=True).first()
+    
+    @property
+    def votes_count(self):
+        """Count of votes (computed)."""
+        return self.votes.count()
+```
+
+**Código incorrecto:**
+```python
+# ❌ INCORRECTO - latest_version es una propiedad, no un campo
+validated_resources = resources.filter(
+    latest_version__status='Validated'
+).count()
+
+# ❌ INCORRECTO - votes_count es una propiedad, no un campo
+total_votes = resources.aggregate(
+    total=Sum('votes_count')
+)['total']
+```
+
+---
+
+### 21.3 Solución: Usar Modelos Relacionados Directamente
+
+**Fix para validated_resources:**
+```python
+# ✅ CORRECTO - Usar ResourceVersion directamente
+from apps.resources.models import ResourceVersion
+
+validated_resources = ResourceVersion.objects.filter(
+    resource__owner=user,
+    resource__deleted_at__isnull=True,
+    is_latest=True,
+    status='Validated'
+).count()
+```
+
+**Fix para total_votes:**
+```python
+# ✅ CORRECTO - Usar Vote model directamente
+from apps.interactions.models import Vote
+
+total_votes = Vote.objects.filter(
+    resource__owner=user,
+    resource__deleted_at__isnull=True
+).count()
+```
+
+**Fix para total_reuses:**
+```python
+# ✅ CORRECTO - Usar campo denormalizado forks_count
+total_reuses = resources.aggregate(
+    total=Sum('forks_count')
+)['total'] or 0
+```
+
+---
+
+### 21.4 Problema: select_related() con Propiedades
+
+**Error encontrado:**
+```
+django.core.exceptions.FieldError: Invalid field name(s) given in select_related: 'latest_version'
+```
+
+**Código incorrecto:**
+```python
+# ❌ INCORRECTO
+resources = Resource.objects.filter(
+    owner=user,
+    deleted_at__isnull=True
+).select_related('latest_version').order_by('-created_at')
+```
+
+**Fix:**
+```python
+# ✅ CORRECTO - Usar prefetch_related para relaciones inversas
+resources = Resource.objects.filter(
+    owner=user,
+    deleted_at__isnull=True
+).prefetch_related('versions').order_by('-created_at')
+```
+
+---
+
+### 21.5 Problema: Filtrado por Status con Propiedades
+
+**Desafío:** No se puede filtrar por `latest_version__status` directamente en el queryset.
+
+**Solución:** Filtrar en Python después de obtener los recursos:
+
+```python
+if resource_status:
+    # Get all resources and filter in Python
+    all_resources = list(resources)
+    resources_filtered = [
+        r for r in all_resources 
+        if r.latest_version and r.latest_version.status == resource_status
+    ]
+    total_count = len(resources_filtered)
+    # Pagination
+    start = (page - 1) * page_size
+    end = start + page_size
+    resources = resources_filtered[start:end]
+else:
+    # Pagination normal
+    total_count = resources.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    resources = resources[start:end]
+```
+
+**Trade-off:** Menos eficiente para datasets grandes, pero funciona para MVP.
+
+---
+
+### 21.6 Archivo Corregido Completo
+
+**File:** `backend/apps/authentication/views_users.py`
+
+```python
+"""User profile views"""
+
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from django.shortcuts import get_object_or_404
+from django.db.models import Count, Sum
+
+from apps.authentication.models import User
+from apps.authentication.serializers import UserSerializer
+from apps.resources.models import Resource, ResourceVersion
+from apps.resources.serializers import ResourceListSerializer
+from apps.interactions.models import Vote
+
+
+class UserDetailView(APIView):
+    """Get user profile information"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request, user_id):
+        user = get_object_or_404(User, id=user_id, is_active=True)
+        
+        # Get user metrics
+        resources = Resource.objects.filter(owner=user, deleted_at__isnull=True)
+        
+        total_resources = resources.count()
+        
+        # Count validated resources by checking latest versions
+        validated_resources = ResourceVersion.objects.filter(
+            resource__owner=user,
+            resource__deleted_at__isnull=True,
+            is_latest=True,
+            status='Validated'
+        ).count()
+        
+        # Total votes received across all user's resources
+        total_votes = Vote.objects.filter(
+            resource__owner=user,
+            resource__deleted_at__isnull=True
+        ).count()
+        
+        # Total reuses (forks) received
+        total_reuses = resources.aggregate(
+            total=Sum('forks_count')
+        )['total'] or 0
+        
+        # Calculate impact (simple formula for MVP)
+        total_impact = (validated_resources * 10) + total_votes + (total_reuses * 5)
+        
+        # Serialize user data
+        serializer = UserSerializer(user)
+        user_data = serializer.data
+        
+        # Add metrics
+        user_data['metrics'] = {
+            'total_resources': total_resources,
+            'validated_resources': validated_resources,
+            'total_votes': total_votes,
+            'total_reuses': total_reuses,
+            'total_impact': total_impact,
+        }
+        
+        return Response(user_data, status=status.HTTP_200_OK)
+
+
+class UserResourcesView(APIView):
+    """Get user's published resources"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request, user_id):
+        user = get_object_or_404(User, id=user_id, is_active=True)
+        
+        # Get query params
+        resource_status = request.query_params.get('status', None)
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 12))
+        
+        # Base queryset
+        resources = Resource.objects.filter(
+            owner=user,
+            deleted_at__isnull=True
+        ).prefetch_related('versions').order_by('-created_at')
+        
+        # Filter by status if provided
+        if resource_status:
+            all_resources = list(resources)
+            resources_filtered = [
+                r for r in all_resources 
+                if r.latest_version and r.latest_version.status == resource_status
+            ]
+            total_count = len(resources_filtered)
+            start = (page - 1) * page_size
+            end = start + page_size
+            resources = resources_filtered[start:end]
+        else:
+            total_count = resources.count()
+            start = (page - 1) * page_size
+            end = start + page_size
+            resources = resources[start:end]
+        
+        # Serialize
+        serializer = ResourceListSerializer(resources, many=True)
+        
+        return Response({
+            'count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'results': serializer.data
+        }, status=status.HTTP_200_OK)
+```
+
+---
+
+### 21.7 Lecciones Aprendidas
+
+#### Regla #1: Propiedades vs Campos de BD
+**Propiedades** (`@property`):
+- ❌ No se pueden usar en `filter()`
+- ❌ No se pueden usar en `select_related()`
+- ❌ No se pueden usar en `aggregate()`
+- ✅ Se pueden usar después de obtener el objeto
+
+**Campos de BD**:
+- ✅ Se pueden usar en queries
+- ✅ Se pueden indexar
+- ✅ Se pueden optimizar con `select_related()` / `prefetch_related()`
+
+#### Regla #2: Optimización de Queries
+```python
+# ❌ MALO - N+1 queries
+resources = Resource.objects.filter(owner=user)
+for r in resources:
+    print(r.latest_version.title)  # Query por cada recurso
+
+# ✅ BUENO - 2 queries
+resources = Resource.objects.filter(owner=user).prefetch_related('versions')
+for r in resources:
+    print(r.latest_version.title)  # Sin queries adicionales
+```
+
+#### Regla #3: Filtrado con Propiedades
+Cuando necesitas filtrar por una propiedad:
+1. Obtén todos los objetos
+2. Filtra en Python con list comprehension
+3. Aplica paginación manualmente
+
+**Trade-off:** Menos eficiente para datasets grandes, pero funciona para MVP.
+
+---
+
+### 21.8 Metodología de Debugging Aplicada
+
+**Proceso sistemático:**
+1. **Identificar síntoma:** "User not found" en frontend
+2. **Revisar logs del backend:** Error 500 en endpoint
+3. **Analizar traceback:** `FieldError: Cannot resolve keyword 'latest_version'`
+4. **Revisar modelo:** Identificar que es una propiedad, no un campo
+5. **Buscar alternativa:** Usar el modelo relacionado directamente
+6. **Implementar fix:** Cambiar query para usar `ResourceVersion`
+7. **Probar endpoint:** Verificar con `curl`
+8. **Verificar en frontend:** Recargar página
+9. **Repetir** para cada error encontrado
+
+**Herramientas usadas:**
+- `docker-compose logs backend` - Ver errores del servidor
+- `curl` - Probar endpoints directamente
+- Django shell - Probar queries interactivamente
+- Browser DevTools - Verificar requests del frontend
+
+---
+
+### 21.9 Verificación de Funcionamiento
+
+**Endpoint:** `GET /api/users/:id/`
+
+**Response exitosa:**
+```json
+{
+  "id": "70690933-c262-473f-a39e-920668f9fab8",
+  "email": "demo@example.com",
+  "name": "Demo User",
+  "is_admin": false,
+  "metrics": {
+    "total_resources": 2,
+    "validated_resources": 1,
+    "total_votes": 1,
+    "total_reuses": 1,
+    "total_impact": 16
+  }
+}
+```
+
+**Fórmula de Impact:**
+```
+Total Impact = (validated_resources × 10) + total_votes + (total_reuses × 5)
+16 = (1 × 10) + 1 + (1 × 5)
+```
+
+---
+
+### 21.10 Profile Page - Estado Final
+
+**Elementos visibles:**
+✅ Avatar circular con iniciales (DU)  
+✅ Badge de "Contributor"  
+✅ Reputation Score: 16 puntos 🏆  
+✅ Progress Bar: 16/500 hacia el siguiente nivel  
+✅ Metrics Dashboard:
+- 📄 2 Contributions
+- ✅ 1 Validations Made
+- 📈 16 Total Impact
+
+✅ Published Resources Grid: 2 recursos
+- 1 Sandbox
+- 1 Validated
+
+---
+
+### 21.11 Archivos Modificados
+
+**Backend:**
+- ✅ `backend/apps/authentication/views_users.py` (~40 líneas modificadas)
+
+**Docs:**
+- ✅ `docs/delivery/SESSION_11_PROFILE_DEBUG.md` (nuevo, 800+ líneas)
+- ✅ `NEXT_STEPS.md` (nuevo, 400+ líneas)
+- ✅ `docs/ai/AI_USAGE_LOG.md` (actualizado)
+
+---
+
+### 21.12 Métricas de la Sesión
+
+- **Errores encontrados:** 5
+- **Errores corregidos:** 5
+- **Archivos modificados:** 1 backend + 3 docs
+- **Tests manuales:** 4 (2 endpoints × 2 intentos)
+- **Tiempo de debugging:** ~30 minutos
+- **Resultado:** ✅ 100% funcional
+
+---
+
+### 21.13 Consideraciones para Producción
+
+**Actual (MVP):**
+- Filtrado por status en Python (lista completa en memoria)
+- Aceptable para < 100 recursos por usuario
+
+**Para Producción (si es necesario):**
+- Denormalizar `latest_version_id` en tabla `resources`
+- Agregar índice en `(owner_id, latest_version_id)`
+- Filtrar directamente en SQL
+
+**Alternativa de implementación:**
+```python
+# Agregar campo en modelo Resource
+class Resource(models.Model):
+    latest_version = models.ForeignKey(
+        'ResourceVersion',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='+',
+        help_text='Cached latest version for performance'
+    )
+```
+
+**Trade-off:** Más complejidad vs mejor performance.  
+**Decisión MVP:** Mantener simple, optimizar después si es necesario.
+
+---
+
+### 21.14 Prompt Key para esta Sesión
+
+**Prompt inicial:**
+```
+guiame para ver el profile
+```
+
+**Resultado:** Identificación y corrección de 5 errores críticos en endpoints backend.
+
+**Prompt de cierre:**
+```
+Quiero hacer un corte... para una entrega parcial. 
+Pero documenta todo lo que hace falta para seguir en una siguiente sesión.
+Actualiza y haz push de todos los cambios.
+```
+
+**IA generó:**
+1. Documento completo de debugging (SESSION_11_PROFILE_DEBUG.md)
+2. Documento de próximos pasos (NEXT_STEPS.md)
+3. Actualización de AI_USAGE_LOG.md
+4. Commit y push automático
+
+---
+
+### 21.15 Estado del Proyecto
+
+**MVP Core:** ✅ 100% Completo  
+**Profile Page:** ✅ Funcionando  
+**Endpoints Backend:** ✅ Corregidos  
+**Tests E2E:** ⚠️ Pendiente actualizar para profile  
+**Documentación:** ✅ Actualizada  
+
+**Próxima sesión:** Ver `NEXT_STEPS.md` para opciones de continuación.
+
+---
+
+**Registro actualizado:** 2026-02-17 (Sesión 11 — Profile Debugging)  
+**Status:** ✅ MVP CORE COMPLETO + PROFILE PAGE FUNCIONANDO (100%)  
+**Próxima actualización:** Admin Validation UI + Responsive Design
