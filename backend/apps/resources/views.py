@@ -19,6 +19,7 @@ from apps.resources.serializers import (
     ResourceListSerializer,
     ResourceDetailSerializer,
     CreateResourceSerializer,
+    ValidateResourceSerializer,
 )
 
 
@@ -173,4 +174,60 @@ class ResourceCreateView(APIView):
             return Response(
                 {'error': str(e), 'error_code': 'BUSINESS_ERROR'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class ResourceValidateView(APIView):
+    """
+    Validate a resource (Admin only).
+    
+    POST /api/resources/{id}/validate/
+    
+    Changes resource status from Sandbox/Pending to Validated.
+    Only administrators can validate resources.
+    
+    US-13: Validar Recurso (Admin)
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, resource_id):
+        try:
+            resource = ResourceService.validate_resource(
+                admin_user=request.user,
+                resource_id=resource_id
+            )
+            
+            latest_version = resource.latest_version
+            
+            response_data = {
+                'message': 'Resource validated successfully',
+                'resource_id': str(resource.id),
+                'status': latest_version.status,
+                'validated_at': latest_version.validated_at,
+            }
+            
+            serializer = ValidateResourceSerializer(response_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except ValueError as e:
+            error_message = str(e)
+            
+            # Determine appropriate status code
+            if 'not found' in error_message.lower() or 'deleted' in error_message.lower():
+                status_code = status.HTTP_404_NOT_FOUND
+                error_code = 'RESOURCE_NOT_FOUND'
+            elif 'only administrators' in error_message.lower():
+                status_code = status.HTTP_403_FORBIDDEN
+                error_code = 'PERMISSION_DENIED'
+            elif 'already validated' in error_message.lower():
+                status_code = status.HTTP_400_BAD_REQUEST
+                error_code = 'ALREADY_VALIDATED'
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST
+                error_code = 'BUSINESS_ERROR'
+            
+            return Response(
+                {'error': error_message, 'error_code': error_code},
+                status=status_code
             )

@@ -6,11 +6,13 @@ Business logic for resource management, publishing, listing, etc.
 US-05: Explorar Recursos
 US-06: Buscar y Filtrar
 US-08: Publicar Recurso
+US-13: Validar Recurso (Admin)
 """
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Q, Count, Prefetch
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from apps.resources.models import Resource, ResourceVersion
 
 User = get_user_model()
@@ -143,3 +145,62 @@ class ResourceService:
         )
         
         return resource
+    
+    @staticmethod
+    @transaction.atomic
+    def validate_resource(admin_user, resource_id):
+        """
+        Validate a resource (change status to Validated).
+        
+        Only Admin users can validate resources.
+        Updates latest_version.status = 'Validated' and sets validated_at.
+        
+        Args:
+            admin_user (User): The admin performing validation
+            resource_id (UUID): The resource ID
+        
+        Returns:
+            Resource: The validated resource
+        
+        Raises:
+            ValueError: If resource doesn't exist, is deleted, or user is not admin
+        
+        US-13: Validar Recurso (Admin)
+        """
+        # Check admin permission
+        if not admin_user.is_admin:
+            raise ValueError('Only administrators can validate resources')
+        
+        # Get resource
+        try:
+            resource = Resource.objects.select_for_update().get(
+                id=resource_id,
+                deleted_at__isnull=True
+            )
+        except Resource.DoesNotExist:
+            raise ValueError('Resource not found or has been deleted')
+        
+        # Get latest version
+        latest_version = resource.latest_version
+        if not latest_version:
+            raise ValueError('Resource has no versions')
+        
+        # Check if already validated
+        if latest_version.status == 'Validated':
+            raise ValueError('Resource is already validated')
+        
+        # Update status
+        latest_version.status = 'Validated'
+        latest_version.validated_at = timezone.now()
+        latest_version.save(update_fields=['status', 'validated_at', 'updated_at'])
+        
+        # TODO: Create notification for owner (US-18)
+        # from apps.notifications.services import NotificationService
+        # NotificationService.create_notification(
+        #     user=resource.owner,
+        #     type='resource_validated',
+        #     resource=resource
+        # )
+        
+        return resource
+

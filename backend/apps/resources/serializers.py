@@ -157,3 +157,16 @@ class CreateResourceSerializer(serializers.Serializer):
                 })
         
         return data
+
+
+class ValidateResourceSerializer(serializers.Serializer):
+    """
+    Serializer for validate resource response.
+    
+    US-13: Validar Recurso (Admin)
+    """
+    
+    message = serializers.CharField()
+    resource_id = serializers.UUIDField()
+    status = serializers.CharField()
+    validated_at = serializers.DateTimeField()
