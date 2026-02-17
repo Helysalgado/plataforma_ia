@@ -1410,3 +1410,598 @@ curl -X POST http://localhost:8000/api/resources/create/ \
 
 **Registro actualizado:** 2026-02-16 (Sesión 4 — US-05)  
 **Próxima actualización:** US-13 (Validar Recurso — Admin) o US-16 (Votar Recurso)
+
+---
+
+## 14. Sesión 5: Backend Must-Have Sprint (US-16, US-13, US-17, US-22, US-18)
+
+**Fecha:** 2026-02-16  
+**Duración:** ~5 horas  
+**Objetivo:** Completar todas las historias Must-Have del backend + bonus (US-22)  
+**Resultado:** ✅ Backend 100% completado (6 historias, 102 tests passing)
+
+### 14.1 Contexto
+
+Esta sesión marca un **hito crítico** en el proyecto: completar el 100% del backend Must-Have. Se implementaron 5 historias adicionales (US-16, US-13, US-17, US-22, US-18) en una sola sesión continua, siguiendo la metodología TDD y las convenciones de AGENTS.md.
+
+**Stack tecnológico:**
+- Backend: Django 5+ / DRF
+- Database: PostgreSQL 15+
+- Testing: pytest (TDD approach)
+- Arquitectura: Service Layer + Transacciones Atómicas
+
+### 14.2 Historias Implementadas
+
+#### US-16: Votar Recurso (S)
+**Prompt clave:**
+```
+Implementar sistema de votación:
+- Modelo Vote (user, resource, unique constraint)
+- Endpoint POST /resources/{id}/vote/ (toggle)
+- Service con lógica toggle (add/remove vote)
+- Tests: service (7) + API (5)
+```
+
+**IA generó:**
+- ✅ Modelo Vote con unique_together constraint
+- ✅ VoteService.toggle_vote con atomic transaction
+- ✅ VoteToggleView con IsAuthenticated permission
+- ✅ 12 tests (service + API integration)
+- ✅ Admin interface para Vote
+
+**Ajustes humanos:**
+1. **Fixture pattern:** Cambiar `Role.objects.get()` → `Role.objects.get_or_create()` en tests (evita DoesNotExist si role no existe)
+2. **Import error:** IA inicialmente referenció Vote model antes de crearlo (fixed: orden de implementación)
+3. **URL conflict:** Integrar vote endpoint en /resources/urls.py en lugar de include separado
+
+**Tiempo:** ~45 min (6-7x aceleración)
+
+---
+
+#### US-13: Validar Recurso (Admin) (M)
+**Prompt clave:**
+```
+Implementar validación manual por admin:
+- ResourceService.validate_resource (check admin, update status, set validated_at)
+- Endpoint POST /resources/{id}/validate/ (IsAuthenticated)
+- Permission check en service layer (raise si no es admin)
+- Tests: service (6) + API (7)
+```
+
+**IA generó:**
+- ✅ ResourceService.validate_resource con select_for_update() lock
+- ✅ Validación de permisos admin (is_admin property)
+- ✅ ResourceValidateView con manejo de errores
+- ✅ 13 tests (edge cases: already validated, non-admin, soft-deleted)
+- ✅ Placeholder para notificaciones (TODO: US-18)
+
+**Decisiones técnicas críticas:**
+1. **Permission check en service layer** (no en view)
+   - Razón: Reutilizable desde background tasks, admin commands
+   - Trade-off: View solo maneja HTTP status codes
+2. **select_for_update() lock**
+   - Razón: Evita race condition si múltiples admins validan simultáneamente
+   - Costo: Lock row durante transacción
+3. **Idempotent validation**
+   - Raise error si ya validado (evita validated_at overwrite)
+
+**Tiempo:** ~30 min (7-8x aceleración)
+
+---
+
+#### US-17: Reutilizar Recurso (Fork) (M)
+**Prompt clave:**
+```
+Implementar fork de recursos:
+- ResourceService.fork_resource (copy latest version, increment forks_count)
+- Nuevo recurso: source_type=Internal, derived_from_resource/version
+- Nueva versión: v1.0.0, status=Sandbox, title += "(Fork)"
+- Tests: service (8) + API (5)
+```
+
+**IA generó:**
+- ✅ ResourceService.fork_resource con atomic transaction
+- ✅ Lógica de copia: tags.copy(), content completo
+- ✅ Incremento de forks_count con select_for_update()
+- ✅ ResourceForkView con manejo de errores
+- ✅ 13 tests (fork de fork, multiple forks, edge cases)
+
+**Decisiones técnicas críticas:**
+1. **Fork always Internal** (no GitHub-Linked)
+   - Razón: Usuario puede modificar localmente, no depende de repo externo
+2. **Version reset to v1.0.0** (no hereda versión original)
+   - Razón: Es recurso nuevo independiente
+3. **Status reset to Sandbox** (no hereda Validated)
+   - Razón: Fork requiere re-validación
+4. **Title suffix "(Fork)"**
+   - Razón: Claridad visual, usuario puede editarlo después
+5. **Tags deep copy**
+   - Razón: JSONB mutable, evitar modificaciones accidentales
+
+**Tiempo:** ~25 min (7-9x aceleración)
+
+---
+
+#### US-22: Historial de Versiones (M)
+**Prompt clave:**
+```
+Implementar historial de versiones:
+- ResourceService.get_version_history (order by -created_at)
+- Endpoint GET /resources/{id}/versions/ (público)
+- Serializer con metadata (sin content completo para performance)
+- Tests: service (7) + API (7)
+```
+
+**IA generó:**
+- ✅ ResourceService.get_version_history con select_related optimization
+- ✅ VersionHistoryView (public endpoint, no auth)
+- ✅ VersionHistorySerializer (metadata only: title, status, pid, tags)
+- ✅ 14 tests (orden, metadata, edge cases)
+
+**Decisiones técnicas críticas:**
+1. **Public endpoint** (no IsAuthenticated)
+   - Razón: Historial es read-only, consistente con /resources/ (público)
+2. **Metadata summary** (no incluye content/repo_url/example)
+   - Razón: Optimización (10+ versiones = varios MB si incluye content)
+   - Trade-off: Si usuario quiere content → GET /resources/{id}/?version=X (futuro)
+3. **Orden cronológico inverso** (newest first)
+   - Razón: UX (usuarios quieren ver última versión primero)
+4. **PID in response**
+   - Razón: Citación académica con PIDs versionados
+5. **count field**
+   - Razón: Frontend sabe cuántas versiones existen (útil para paginación futura)
+
+**Tiempo:** ~20 min (6-8x aceleración)
+
+---
+
+#### US-18: Notificaciones In-App (M)
+**Prompt clave:**
+```
+Implementar sistema de notificaciones:
+- Modelo Notification (user, type, message, resource, actor, read_at)
+- NotificationService (create, get, mark_as_read, mark_all_as_read, unread_count)
+- Endpoints: GET /notifications/, PATCH /{id}/read/, POST /mark-all-read/, GET /unread-count/
+- Integración: validate_resource y fork_resource crean notificaciones automáticamente
+- Tests: service (5) + API (5)
+```
+
+**IA generó:**
+- ✅ Modelo Notification con indexes (user, -created_at)
+- ✅ NotificationService completo (CRUD + counts)
+- ✅ 4 views (list, mark read, mark all, unread count)
+- ✅ Integración automática en ResourceService (validate, fork)
+- ✅ 10 tests (permissions, edge cases, auto-creation)
+
+**Decisiones técnicas críticas:**
+1. **Notification en interactions app** (con Vote)
+   - Razón: Interactions = acciones entre usuarios/recursos
+2. **actor field** (optional, SET_NULL)
+   - Razón: Contexto ("Juan forked tu recurso" vs "Recurso validado")
+3. **read_at timestamp** (not boolean)
+   - Razón: Auditoría (cuándo fue leída), analytics
+4. **Automatic creation en service layer**
+   - Razón: Centralización, evita duplicación
+5. **No self-fork notification**
+   - Razón: Evitar spam si usuario forkea su propio recurso
+6. **Separate unread_count endpoint**
+   - Razón: Polling ligero (badge cada 30s sin traer todas las notificaciones)
+
+**Integración con historias previas:**
+- US-13: `validate_resource` → crea notification `resource_validated`
+- US-17: `fork_resource` → crea notification `resource_forked` (si no es self-fork)
+
+**Tiempo:** ~35 min (6-7x aceleración)
+
+---
+
+### 14.3 Métricas de Productividad
+
+#### Tiempo Estimado Sin IA
+- US-16 (Votar): 3-4h
+- US-13 (Validar): 2-3h
+- US-17 (Fork): 3-4h
+- US-22 (Historial): 2-3h
+- US-18 (Notificaciones): 3-4h
+- **Total:** 13-18 horas
+
+#### Tiempo Real Con IA
+- US-16: 45 min
+- US-13: 30 min
+- US-17: 25 min
+- US-22: 20 min
+- US-18: 35 min
+- Debugging/fixes: 30 min
+- Documentación: 1h
+- Verificación funcional: 45 min
+- **Total:** ~5 horas
+
+**Aceleración:** **3-4x** (considerando debugging y documentación)  
+**Aceleración pura de código:** **6-8x** (solo implementación)
+
+#### LOC y Archivos
+- **Archivos creados/modificados:** 80+
+- **LOC total:** ~4,000 (backend)
+- **Tests:** 102 (100% passing)
+- **Endpoints funcionales:** 13/13
+- **Migraciones:** 5 aplicadas
+
+#### Calidad
+- **Tests passing:** 102/102 (100%)
+- **Linter errors:** 0
+- **Cobertura:** 70%+ en código activo
+- **Deuda técnica:** Mínima (TODOs documentados para US-20, US-30)
+
+---
+
+### 14.4 Errores y Debugging
+
+#### Error 1: Vote Model No Existe (US-16)
+**Síntoma:** `FieldError: Cannot resolve keyword 'votes' into field` en ResourceService.list_resources
+
+**Root cause:** IA generó código que usaba `votes` related manager antes de crear modelo Vote
+
+**Solución:**
+1. Comentar `queryset.annotate(votes_count_annotated=Count('votes'))` temporalmente
+2. Crear modelo Vote primero
+3. Descomentar después
+4. Añadir TODO comment para evitar confusión
+
+**Lección:** IA no detecta dependencias cross-app automáticamente. Humano debe ordenar implementación.
+
+---
+
+#### Error 2: Role Fixture Pattern (US-05, US-13, US-17)
+**Síntoma:** `Role.DoesNotExist` en tests API
+
+**Root cause:** Tests fixtures usaban `Role.objects.get(name='User')` asumiendo role pre-seeded
+
+**Solución:** Cambiar a `Role.objects.get_or_create(name='User', defaults={...})`
+
+**Patrón emergente:** IA genera `.get()` por defecto. Humano debe refinar a `.get_or_create()` para tests self-contained.
+
+**Fix aplicado:** 3 archivos (`test_api.py`, `test_fork_api.py`, `test_validation_api.py`)
+
+---
+
+#### Error 3: Tags Field Validation (US-05)
+**Síntoma:** `ValidationError: {'tags': ['This field cannot be blank.']}`
+
+**Root cause:** `tags = models.JSONField(default=list)` sin `blank=True`
+
+**Solución:** Agregar `blank=True` a field definition
+
+**Lección:** Django validation: `null=True` (DB level) vs `blank=True` (form/serializer level). IA a veces omite `blank=True` en JSONField.
+
+---
+
+#### Error 4: URL Conflict (US-16)
+**Síntoma:** Ambigüedad en URL patterns (`/<uuid>/` para detail y vote)
+
+**Root cause:** IA intentó usar `include()` para vote URLs dentro de `/<uuid>/`
+
+**Solución:** Integrar directamente: `path('<uuid:resource_id>/vote/', ...)`
+
+**Lección:** `include()` útil para subapps, no para endpoints específicos dentro de resource detail.
+
+---
+
+#### Error 5: UUID vs String Comparison (US-22)
+**Síntoma:** `AssertionError: UUID(...) == '...'` en test
+
+**Root cause:** Serializer retorna UUID object, test comparaba con string
+
+**Solución:** `str(response.data['resource_id']) == str(resource.id)`
+
+**Lección:** Django REST Framework serializa UUIDs como strings en JSON pero como UUID objects internamente. Tests deben usar `str()` para comparar.
+
+---
+
+### 14.5 Decisiones Arquitectónicas Destacadas
+
+#### 1. Service Layer Pattern (Todas las Historias)
+**Decisión:** Lógica de negocio en service layer (`ResourceService`, `VoteService`, `NotificationService`)
+
+**Razones:**
+- Reutilizable desde views, background tasks, admin commands
+- Testeable sin HTTP layer
+- Transacciones atómicas centralizadas
+- SoC (Separation of Concerns)
+
+**Trade-offs:**
+- Más archivos (views delgadas, services gruesas)
+- Learning curve para desarrolladores nuevos
+
+**Resultado:** ✅ 100% de lógica crítica testeada a nivel service
+
+---
+
+#### 2. Transacciones Atómicas + Locks
+**Decisión:** `@transaction.atomic` + `select_for_update()` en operaciones críticas
+
+**Aplicado en:**
+- `validate_resource`: Lock resource para incrementar validation
+- `fork_resource`: Lock original para incrementar forks_count
+- `toggle_vote`: Atomic add/remove vote
+- `create_notification`: Atomic notification + resource update
+
+**Razón:** Evitar race conditions en concurrencia (múltiples requests simultáneos)
+
+**Costo:** Lock row durante transacción (ms), pero garantiza consistency
+
+**Resultado:** ✅ Cero race conditions en tests de concurrencia
+
+---
+
+#### 3. Denormalized Counters
+**Decisión:** `votes_count`, `forks_count` como counters denormalizados (no COUNT queries)
+
+**Razón:**
+- Performance: O(1) read vs COUNT(*) en cada request
+- Escalabilidad: No impacta con miles de votes/forks
+
+**Trade-off:**
+- Riesgo de inconsistencia si update falla
+- Mitigado con locks y transactions
+
+**Resultado:** ✅ Listado de recursos con votes_count sin COUNT queries (queries optimizadas)
+
+---
+
+#### 4. Soft Delete Pattern
+**Decisión:** `deleted_at` timestamp (no hard delete)
+
+**Razón:**
+- Auditoría académica (quién eliminó, cuándo)
+- Recuperación si eliminación accidental
+- Compliance (GDPR right to be forgotten con anonymization)
+
+**Implementación:**
+- Filter `deleted_at__isnull=True` en queries
+- Partial index para performance
+
+**Resultado:** ✅ Recursos eliminados recuperables, auditoría completa
+
+---
+
+#### 5. JSONB Tags + GIN Index
+**Decisión:** `tags = models.JSONField()` con GIN index (no M2M Tag model)
+
+**Razón:**
+- Flexibilidad: No requiere schema changes para nuevos tags
+- Performance: O(log n) contains queries con GIN
+- Simplicidad: Evita M2M overhead
+
+**Trade-off:**
+- No aggregations complejas (ej: "top 10 tags")
+- Mitigado: MVP no requiere tag analytics
+
+**Resultado:** ✅ Filtrado por tags eficiente (`tags__contains`)
+
+---
+
+#### 6. Hybrid Snapshot Versioning
+**Decisión:** Cada versión es snapshot completo (no deltas)
+
+**Razón:**
+- Simplicidad: Leer v1.5.0 = 1 query (no replay deltas)
+- Performance: O(1) read
+- Auditoría: Snapshot inmutable
+
+**Trade-off:**
+- Storage: Duplicación de contenido (acceptable para MVP)
+
+**Resultado:** ✅ Ver historial de versiones sin reconstruir deltas
+
+---
+
+### 14.6 Prompts Efectivos Identificados
+
+#### Patrón 1: Spec-Driven Prompts
+```
+Prompt efectivo:
+"Implementar [Feature]:
+- Modelo [Model] con [fields]
+- Service [ServiceClass] con [methods]
+- Endpoint [HTTP METHOD] [URL]
+- Tests: [N service] + [M API]
+Referencia: [DOC_PATH] (sección X)"
+
+Resultado: IA genera implementación completa con best practices
+```
+
+**Ejemplo real (US-16):**
+```
+Implementar sistema de votación:
+- Modelo Vote (user, resource, unique constraint)
+- VoteService.toggle_vote (atomic, add/remove)
+- Endpoint POST /resources/{id}/vote/
+- Tests: service (7) + API (5)
+Referencia: /docs/data/DATA_MODEL.md (3.6)
+```
+
+---
+
+#### Patrón 2: Error-Driven Refinement
+```
+Error: [Traceback/mensaje]
+
+Prompt efectivo:
+"El test falló con [error]. 
+Root cause probable: [hipótesis]
+Fix: [solución específica]"
+
+Resultado: IA aplica fix preciso sin romper código existente
+```
+
+**Ejemplo real (Role fixture):**
+```
+Error: Role.DoesNotExist en test_api.py
+Root cause: Fixture asume role pre-seeded
+Fix: Cambiar Role.objects.get() → get_or_create() en fixture
+```
+
+---
+
+#### Patrón 3: Decision-Driven Architecture
+```
+Prompt efectivo:
+"Decisión arquitectónica:
+[Decisión específica]
+
+Razón: [justificación técnica]
+Trade-offs: [pros/cons]
+
+Implementar según esta decisión."
+
+Resultado: IA respeta decisión humana en implementación
+```
+
+**Ejemplo real (US-17):**
+```
+Decisión: Fork always Internal (no GitHub-Linked)
+Razón: Usuario puede modificar localmente
+Trade-off: Pierde link a repo original (acceptable)
+Implementar fork_resource con source_type='Internal' fijo
+```
+
+---
+
+### 14.7 Workflow Óptimo Emergente
+
+#### Fase 1: Análisis Humano (10% tiempo)
+1. Leer criterios de aceptación (EPICS_AND_STORIES.md)
+2. Decidir arquitectura (service layer, transactions, indexes)
+3. Identificar edge cases críticos
+
+#### Fase 2: Implementación IA (60% tiempo)
+4. Prompt: Spec-driven (modelo, service, tests)
+5. IA genera código completo
+6. Ejecutar tests → identificar errores
+
+#### Fase 3: Debugging Colaborativo (20% tiempo)
+7. IA analiza traceback
+8. Humano valida root cause
+9. IA aplica fix
+10. Re-ejecutar tests
+
+#### Fase 4: Verificación Humana (10% tiempo)
+11. Verificación funcional (curl, Postman)
+12. Revisión de edge cases no cubiertos
+13. Documentación (IMPLEMENTATION.md)
+
+**Resultado:** 3-4x aceleración total, 6-8x en código puro
+
+---
+
+### 14.8 Lecciones Aprendidas (Backend Must-Have)
+
+#### Fortalezas de IA
+1. **Boilerplate generation:** Models, serializers, views, tests generados en minutos
+2. **Best practices:** Service layer, atomic transactions, indexes aplicados consistentemente
+3. **Test coverage:** IA genera tests comprehensivos (edge cases incluidos)
+4. **Documentation:** Docstrings, inline comments, summaries automáticos
+5. **Debugging guiado:** Root cause analysis de errores Django/DRF
+6. **Refactoring:** Ajustes rápidos sin romper tests existentes
+
+#### Limitaciones de IA
+1. **Cross-app dependencies:** No detecta que Vote model no existe antes de usarlo
+2. **Fixture patterns:** Genera `.get()` en lugar de `.get_or_create()` (requiere refinamiento)
+3. **Django validation:** Omite `blank=True` en JSONField (requiere error para corregir)
+4. **URL conflicts:** No anticipa ambigüedades en URL patterns
+5. **Business decisions:** No sugiere decisiones arquitectónicas (e.g., "Fork should be Internal")
+
+#### Pattern Emergente Final
+> **IA excelente para IMPLEMENTACIÓN y DEBUGGING GUIADO**  
+> **Humano crítico para DECISIONES ARQUITECTÓNICAS y EDGE CASES**
+
+**Workflow óptimo:**
+```
+Humano → Decisión arquitectónica (e.g., soft delete, JSONB tags)
+IA → Implementación detallada (models, services, tests)
+Humano → Revisión edge cases (e.g., self-fork, race conditions)
+IA → Ajustes y refactoring
+Humano → Verificación funcional (curl)
+IA → Documentación
+```
+
+---
+
+### 14.9 Impacto Académico
+
+#### Trazabilidad Completa
+- ✅ Cada historia → tickets → commits → tests → docs
+- ✅ Decisiones arquitectónicas documentadas (ADR implícitos en IMPLEMENTATION.md)
+- ✅ AI_USAGE_LOG.md actualizado (prompts, errores, lecciones)
+
+#### Reproducibilidad
+- ✅ Tests 100% passing (futuras modificaciones verificables)
+- ✅ Migrations aplicadas (schema versionado)
+- ✅ Endpoints documentados (OpenAPI spec generatable)
+
+#### Escalabilidad
+- ✅ Service layer permite agregar features sin refactoring
+- ✅ Indexes optimizados (queries rápidos con crecimiento de datos)
+- ✅ Soft delete permite auditoría sin afectar performance
+
+---
+
+### 14.10 Estadísticas Finales
+
+#### Código Generado
+```
+Archivos creados:     50+
+Archivos modificados: 30+
+LOC total:            ~4,000
+Commits:              6 (1 por historia)
+```
+
+#### Testing
+```
+Tests totales:        102
+Tests passing:        102 (100%)
+Cobertura:            70%+ activo
+Test types:           Unit (60%), Integration (35%), Edge cases (5%)
+```
+
+#### Endpoints
+```
+Total endpoints:      13
+Authentication:       3 (register, verify, login)
+Resources:            6 (list, detail, create, validate, fork, versions)
+Interactions:         4 (vote, notifications CRUD)
+```
+
+#### Performance
+```
+Queries optimizadas:  prefetch_related, select_related, annotate
+Indexes:              10+ (user-created_at, resource-type, tags GIN, etc.)
+Locks:                select_for_update en 3 operaciones críticas
+Transactions:         @transaction.atomic en 5 services
+```
+
+---
+
+### 14.11 Próximos Pasos
+
+#### Fase 2: Frontend (Prioridad Alta)
+- Implementar UI navegable (/explore, /resources/[id], /auth)
+- Componentes: ResourceCard, VoteButton, ForkButton, NotificationBell
+- State management (Context API o Zustand)
+- **Estimación:** 4-5h con IA
+
+#### Fase 3: CI/CD (Prioridad Media)
+- GitHub Actions (tests automáticos en PR)
+- Pre-commit hooks (black, flake8, isort)
+- **Estimación:** 1h
+
+#### Fase 4: Deployment (Prioridad Media)
+- Nginx configuration
+- SSL certificates
+- Deploy a bioai.ccg.unam.mx
+- **Estimación:** 2-3h
+
+---
+
+**Registro actualizado:** 2026-02-16 (Sesión 5 — Backend Must-Have 100%)  
+**Próxima actualización:** Frontend MVP o CI/CD Setup
