@@ -49,3 +49,18 @@ export interface ResourceFilters {
   search?: string;
   ordering?: string;
 }
+
+export interface Notification {
+  id: string;
+  type: 'ResourceValidated' | 'ResourceForked' | 'ValidationRevoked' | 'ValidationRequested';
+  message: string;
+  resource_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  count: number;
+  results: Notification[];
+  unread_count: number;
+}

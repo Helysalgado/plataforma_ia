@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react';
 import { resourcesApi } from '@/services/resources';
 import { ResourceCard } from '@/components/ResourceCard';
+import { ResourceCardSkeleton } from '@/components/Skeletons';
 import type { Resource, ResourceFilters } from '@/types/api';
 
 export default function ExplorePage() {
@@ -178,8 +179,10 @@ export default function ExplorePage() {
 
         {/* Loading State */}
         {loading && (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <ResourceCardSkeleton key={i} />
+            ))}
           </div>
         )}
 

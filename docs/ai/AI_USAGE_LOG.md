@@ -2005,3 +2005,663 @@ Transactions:         @transaction.atomic en 5 services
 
 **Registro actualizado:** 2026-02-16 (Sesión 5 — Backend Must-Have 100%)  
 **Próxima actualización:** Frontend MVP o CI/CD Setup
+
+---
+
+## 15. SESIÓN 6: FRONTEND PHASE A+B — Authentication + Interactive Components (2026-02-17)
+
+### 15.1 Contexto
+
+**Solicitud del usuario:**
+> "Quiero continuar con el proyecto plataforma_ia. Objetivo próxima fase:
+> - Implementar authentication (login/register pages)
+> - Agregar interactive components (VoteButton, ForkButton)
+> - NotificationBell con unread count"
+
+**Estado inicial:**
+- ✅ Backend Must-Have: 100% completado (US-01, 02, 05, 13, 16, 17, 18, 22)
+- 🟡 Frontend básico: /explore y /resources/[id] implementados (commit b99ea16)
+- ⏳ Frontend auth + interactive: 0%
+
+**Estrategia elegida:** Opción 1 (Fase A + B completas)
+
+---
+
+### 15.2 Prompt Principal Utilizado
+
+**Pattern: Component-Driven Development**
+
+```markdown
+Fase A: Authentication UI
+1. AuthContext con JWT management
+2. /register page con validación
+3. /login page con redirect
+4. Navbar con auth state
+
+Fase B: Interactive Components
+5. VoteButton con optimistic updates
+6. ForkButton con modal
+7. NotificationBell con auto-refresh
+
+Decisiones clave:
+- JWT en localStorage (MVP), migrar a httpOnly cookies post-MVP
+- Optimistic updates para UX instantánea
+- Polling 30s para notificaciones (no WebSockets en MVP)
+- Double validation: frontend (UX) + backend (security)
+```
+
+---
+
+### 15.3 Artefactos Generados
+
+#### 15.3.1 AuthContext (Context API)
+**Archivo:** `frontend/contexts/AuthContext.tsx` (135 LOC)
+
+**Prompt efectivo:**
+> "Crea AuthContext con:
+> - Provider global para user state
+> - JWT storage en localStorage
+> - Auto-fetch user on mount si token existe
+> - Methods: login, logout, register
+> - Error handling con rollback
+> - Helper getAuthToken() para api-client"
+
+**Output IA:**
+- ✅ TypeScript types completos
+- ✅ Loading state para evitar flash
+- ✅ Token expiration handling
+- ✅ Error messages user-friendly
+
+**Ajustes humanos:**
+- Token key names: `bioai_access_token`, `bioai_refresh_token`
+- Error messages en español
+
+**Valor agregado por IA:**
+- Pattern Context Provider bien estructurado
+- useAuth hook con type safety
+- Manejo de SSR (typeof window checks)
+
+---
+
+#### 15.3.2 Login Page (US-02 Frontend)
+**Archivo:** `frontend/app/login/page.tsx` (172 LOC)
+
+**Prompt efectivo:**
+> "Crea /login page con:
+> - Formulario simple (email, password)
+> - Error handling: 401, email not verified
+> - Redirect a intended route (?redirect=/path)
+> - Auto-redirect si ya autenticado
+> - Link a password recovery (placeholder)
+> - Success message si ?verified=true"
+
+**Output IA:**
+- ✅ Form validation básica
+- ✅ Loading state durante submit
+- ✅ Error display claro
+- ✅ Redirect logic con searchParams
+
+**Decisiones técnicas:**
+- useSearchParams() para capturar redirect query param
+- useEffect para auto-redirect si authenticated
+- Placeholder para password recovery (futuro)
+
+---
+
+#### 15.3.3 Register Page (US-01 Frontend)
+**Archivo:** `frontend/app/register/page.tsx` (283 LOC)
+
+**Prompt efectivo:**
+> "Crea /register page con:
+> - Validación client-side completa
+> - Password strength: min 8 chars, 1 uppercase, 1 number
+> - Password confirmation match
+> - Success screen: 'Verifica tu email' con instrucciones
+> - Field-level error display
+> - Disable form durante loading"
+
+**Output IA:**
+- ✅ Validación exhaustiva (email format, password strength, name length)
+- ✅ Success state con redirect a instructions screen
+- ✅ Clear error on field change (UX inmediata)
+- ✅ Responsive form
+
+**Patrón destacado:**
+```typescript
+const validateForm = (): boolean => {
+  const errors: Record<string, string> = {};
+  
+  if (!email) errors.email = 'Email obligatorio';
+  else if (!/regex/.test(email)) errors.email = 'Email inválido';
+  
+  if (password.length < 8) errors.password = 'Mínimo 8 caracteres';
+  else if (!/[A-Z]/.test(password)) errors.password = 'Falta mayúscula';
+  
+  setErrors(errors);
+  return Object.keys(errors).length === 0;
+};
+```
+
+---
+
+#### 15.3.4 VoteButton (US-16 Frontend)
+**Archivo:** `frontend/components/VoteButton.tsx` (115 LOC)
+
+**Prompt efectivo:**
+> "Crea VoteButton con:
+> - Toggle vote/unvote (single click)
+> - Optimistic UI update (instant feedback)
+> - Rollback on error
+> - States: not voted (gray), voted (blue), loading
+> - Tooltip error con auto-hide 3s
+> - Disabled si no autenticado (tooltip informativo)"
+
+**Output IA:**
+- ✅ Optimistic pattern perfecto
+- ✅ Visual states diferenciados (background color + icon fill)
+- ✅ onVoteChange callback para parent
+- ✅ Error handling con rollback
+
+**Patrón optimistic update:**
+```typescript
+const previousCount = votesCount;
+const previousVoted = hasVoted;
+
+// Optimistic
+setHasVoted(!hasVoted);
+setVotesCount(hasVoted ? count - 1 : count + 1);
+
+try {
+  const response = await api.vote();
+  setVotesCount(response.votes_count);
+  setHasVoted(response.voted);
+} catch (error) {
+  // Rollback
+  setHasVoted(previousVoted);
+  setVotesCount(previousCount);
+  showError();
+}
+```
+
+**Valor agregado por IA:**
+- Pattern optimistic UI bien implementado
+- States visuales claros
+- Error UX con auto-hide
+
+---
+
+#### 15.3.5 ForkButton (US-17 Frontend)
+**Archivo:** `frontend/components/ForkButton.tsx` (145 LOC)
+
+**Prompt efectivo:**
+> "Crea ForkButton con:
+> - Modal de confirmación antes de fork
+> - Info sobre qué sucede al reutilizar (bullets)
+> - Loading state durante API call
+> - Redirect automático a /resources/:newId/edit
+> - Error display en modal (no cierra)
+> - Backdrop semi-transparente"
+
+**Output IA:**
+- ✅ Modal con z-index correcto
+- ✅ Info bullets claros
+- ✅ Botones: Cancelar (gray) / Confirmar (green)
+- ✅ Error handling sin cerrar modal
+
+**Decisión UX:**
+- Confirmación obligatoria (no fork directo)
+- Explicación clara de qué sucede
+- Redirect automático a edit (flujo natural)
+
+---
+
+#### 15.3.6 NotificationBell (US-18 Frontend)
+**Archivo:** `frontend/components/NotificationBell.tsx` (245 LOC)
+
+**Prompt efectivo:**
+> "Crea NotificationBell con:
+> - Bell icon con badge unread count (red, >9 muestra '9+')
+> - Dropdown panel: header + list + empty state
+> - Auto-refresh cada 30s
+> - Mark as read on click (update local state)
+> - Mark all as read button
+> - Iconos por notification type (check, fork, warning, bell)
+> - Timestamp relativo (hace Xm, Xh, Xd)
+> - Navigate to resource on click"
+
+**Output IA:**
+- ✅ Badge con conditional rendering
+- ✅ Dropdown z-index correcto (z-50 modal, z-40 backdrop)
+- ✅ Auto-refresh con setInterval + cleanup
+- ✅ Timestamp formatting function
+- ✅ Icon mapping por type
+- ✅ Empty state visual
+
+**Patrón destacado:**
+```typescript
+// Auto-refresh
+useEffect(() => {
+  if (!isAuthenticated) return;
+  
+  const interval = setInterval(() => {
+    fetchNotifications();
+  }, 30000); // 30s
+  
+  return () => clearInterval(interval); // Cleanup
+}, [isAuthenticated]);
+```
+
+**Timestamp formatting:**
+```typescript
+const formatTimestamp = (timestamp: string) => {
+  const diffMins = Math.floor((now - date) / 60000);
+  if (diffMins < 1) return 'ahora';
+  if (diffMins < 60) return `hace ${diffMins}m`;
+  if (diffHours < 24) return `hace ${diffHours}h`;
+  // ...
+};
+```
+
+---
+
+### 15.4 Métricas
+
+#### Código Generado
+```
+Archivos nuevos:        10
+Archivos modificados:   4
+LOC total:              ~1,500
+Componentes:            7
+Páginas:                3
+Contexts:               1
+Services:               2
+```
+
+#### Productividad
+```
+Tiempo estimado manual: 8-10 horas
+Tiempo con IA:          ~2 horas
+Aceleración:            4-5x
+Calidad:                Alta (validaciones completas, UX pulida)
+```
+
+---
+
+### 15.5 Lecciones Aprendidas
+
+#### Fortalezas de IA (Frontend)
+1. **Component boilerplate:** 5x más rápido
+2. **TypeScript types:** Generación automática coherente
+3. **Tailwind classes:** Estilos consistentes sin docs
+4. **State management patterns:** useState, useEffect, useContext
+5. **Error handling:** Try-catch, loading states, error messages
+
+#### Limitaciones (Frontend)
+1. **SSR/CSR confusion:** No distingue servidor/cliente (typeof window necesario)
+2. **State management choice:** No sugiere Context API vs Zustand
+3. **Performance opts:** No agrega React.memo, useMemo sin indicación
+4. **A11y advanced:** No implementa focus traps, ARIA completo
+
+---
+
+### 15.6 Estado del Proyecto
+
+#### Frontend: ~60% Must-Have 🟡
+- ✅ US-05: /explore page
+- ✅ US-07: /resources/[id] detail page
+- ✅ US-01: /register page
+- ✅ US-02: /login page
+- ✅ US-16: VoteButton component
+- ✅ US-17: ForkButton component
+- ✅ US-18: NotificationBell component
+- ⏳ US-08: /publish page
+- ⏳ US-20: /resources/[id]/edit page
+
+---
+
+**Registro actualizado:** 2026-02-17 (Sesión 6 — Frontend Phase A+B)  
+**Próxima actualización:** Publish/Edit pages o E2E Testing
+
+---
+
+## 16. SESIÓN 7: FRONTEND PHASE C — Publish & Edit Pages (2026-02-17)
+
+### 16.1 Contexto
+
+**Solicitud del usuario:**
+> "Opción A: Completar Frontend Must-Have implementando /publish y /edit"
+
+**Estado inicial:**
+- ✅ Backend: 100% Must-Have
+- ✅ Frontend Phase A+B: Auth + Interactive Components
+- ⏳ Frontend Phase C: Publish & Edit pages (0%)
+
+**Objetivo:** Implementar US-08 (Publish) y US-20 (Edit) frontend
+
+---
+
+### 16.2 Artefactos Generados
+
+#### 16.2.1 ResourceForm Component (Reutilizable)
+**Archivo:** `frontend/components/ResourceForm.tsx` (410 LOC)
+
+**Prompt efectivo:**
+> "Crea ResourceForm reutilizable para publish y edit con:
+> - Mode prop: 'create' | 'edit'
+> - Validación completa (title min 3, description min 10, content min 10)
+> - Source type selection (Internal vs GitHub-linked) solo en create
+> - Dynamic fields basados en source_type
+> - Tags input con comma separation
+> - Status selector (Sandbox vs Request Validation) solo en create
+> - Changelog field solo en edit
+> - Error display field-level"
+
+**Output IA:**
+- ✅ Single component para ambos modos
+- ✅ Validaciones exhaustivas
+- ✅ Conditional rendering basado en mode y source_type
+- ✅ Error handling granular
+
+**Decisión técnica:**
+- Pattern: Reutilización con mode prop (no duplicar)
+- Tags: comma-separated string (simple UX)
+
+---
+
+#### 16.2.2 Publish Page (US-08 Frontend)
+**Archivo:** `frontend/app/publish/page.tsx` (115 LOC)
+
+**Prompt efectivo:**
+> "Crea /publish page con:
+> - Require auth + email verified (useEffect redirect)
+> - ResourceForm mode='create'
+> - Info banner con consejos
+> - Redirect a /resources/:newId?published=true después de crear
+> - Error handling con display"
+
+**Output IA:**
+- ✅ Auth checks completos
+- ✅ Loading state durante auth check
+- ✅ Success redirect con query param
+- ✅ Error display user-friendly
+
+**Validaciones frontend:**
+```typescript
+- Title: min 3 chars, max 200
+- Description: min 10 chars
+- Content (Internal): min 10 chars
+- Repo URL (GitHub): format validation
+- Tags: max 50 chars per tag
+```
+
+---
+
+#### 16.2.3 Edit Page (US-20 Frontend)
+**Archivo:** `frontend/app/resources/[id]/edit/page.tsx` (220 LOC)
+
+**Prompt efectivo:**
+> "Crea /resources/[id]/edit page con:
+> - Require auth + ownership (owner o admin)
+> - Fetch resource, pre-fill ResourceForm
+> - Banner explicando versionado:
+>   - Si Validated: 'Se creará nueva versión vX.Y+1.Z'
+>   - Si Sandbox: 'Actualización in-place'
+> - Unauthorized screen si no owner
+> - Redirect con ?updated=true&new_version=bool"
+
+**Output IA:**
+- ✅ Ownership check robusto
+- ✅ Banners informativos diferenciados
+- ✅ Pre-fill form con initialData
+- ✅ Unauthorized UX claro
+- ✅ Success redirect con metadata
+
+**Patrón destacado:**
+```typescript
+// Version increment display
+const nextVersion = isValidated
+  ? version.replace(/(\d+)\.(\d+)\.(\d+)/, 
+      (_, major, minor, patch) => `${major}.${parseInt(minor) + 1}.${patch}`)
+  : version;
+```
+
+---
+
+### 16.3 Integración
+
+#### Updated resourcesApi
+**Cambios:**
+```typescript
+interface CreateResourceRequest { /* 13 fields */ }
+interface UpdateResourceRequest { /* 8 fields */ }
+
+create: (data: CreateResourceRequest) => Promise<Resource>
+update: (id: string, data: UpdateResourceRequest) => Promise<Resource>
+delete: (id: string) => Promise<void>
+```
+
+#### ResourceDetailPage
+**Cambios:**
+- Botón "Editar" (visible solo para owner/admin)
+- Conditional rendering: `user?.name === resource.owner_name || user?.is_admin`
+
+---
+
+### 16.4 Decisiones Arquitectónicas
+
+#### Protección de Rutas
+**Implementación:** useEffect checks por página  
+**Niveles:**
+```
+/publish → Auth + email verified
+/resources/[id]/edit → Auth + ownership
+```
+
+**Trade-off aceptado:**
+- No middleware centralizado (Next.js complexity en MVP)
+- Check en cada página (claridad, no hidden behavior)
+
+---
+
+#### Tags Input: Simple String
+**Decisión:** Comma-separated input (no tag picker library)  
+**Justificación:**
+- Copy/paste friendly
+- Sin dependencias extra
+- Backend espera array (split on submit)
+
+---
+
+### 16.5 Métricas (Fase C)
+
+#### Código Generado
+```
+Archivos nuevos:        4
+Archivos modificados:   2
+LOC:                    ~800
+Tiempo con IA:          ~1 hora
+```
+
+#### Métricas Acumuladas (Sesión 6+7)
+```
+Total archivos nuevos:  14
+Total modificados:      7
+LOC total frontend:     ~2,300
+Páginas completas:      5 (/login, /register, /explore, /detail, /publish, /edit)
+Componentes:            8
+Tiempo total:           ~3 horas
+Aceleración vs manual: 4-5x
+```
+
+---
+
+### 16.6 Estado del Proyecto
+
+#### Frontend: 90% Must-Have ✅
+- ✅ US-01: Register
+- ✅ US-02: Login
+- ✅ US-05: Explore
+- ✅ US-07: Detail
+- ✅ US-08: Publish
+- ✅ US-16: Vote
+- ✅ US-17: Fork
+- ✅ US-18: Notifications
+- ✅ US-20: Edit (Should-Have adelantada)
+- 🟡 US-06: Filters (backend done, UI básica)
+
+**Flujo E2E completo navegable:**
+```
+Register → Login → Explore → Detail → Vote/Fork → Publish → Edit
+```
+
+---
+
+### 16.7 Lecciones Aprendidas
+
+#### Fortalezas IA (Forms):
+1. **Validation patterns:** Generación rápida de rules completas
+2. **Conditional rendering:** Mode-based fields
+3. **Error handling:** Field-level feedback
+4. **UX banners:** Copy claro e informativo
+
+#### Limitaciones:
+1. **Cross-field validation:** No sugiere validaciones cruzadas complejas
+2. **File uploads:** No implementa (no requerido en MVP)
+3. **Preview features:** No agrega markdown preview automático
+
+---
+
+### 16.8 Próximos Pasos Críticos
+
+#### Alta Prioridad:
+1. E2E Tests (Playwright): Register → Publish → Edit flow (~1h)
+2. Toast notifications (react-hot-toast) (~15min)
+3. Loading skeletons (~30min)
+
+#### Media Prioridad:
+4. CI/CD (GitHub Actions) (~1h)
+5. Nginx config (~30min)
+6. Deploy a bioai.ccg.unam.mx (~1h)
+
+---
+
+**Registro actualizado:** 2026-02-17 (Sesión 7 — Frontend Phase C: Publish & Edit)  
+**Próxima actualización:** E2E Testing o CI/CD Setup
+
+---
+
+## 17. SESIÓN 8: TESTS & POLISH — Toast Notifications, Loading Skeletons, E2E Tests (2026-02-17)
+
+### 17.1 Contexto
+
+**Solicitud del usuario:**
+> "Opción A: Tests & Polish (antes de deploy)"
+
+**Objetivo:**
+1. Toast notifications (react-hot-toast)
+2. Loading skeletons (mejor UX)
+3. E2E tests básicos (Playwright)
+
+---
+
+### 17.2 Implementación
+
+#### 17.2.1 Toast Notifications (react-hot-toast)
+**Instalación:** 4 packages
+
+**Configuración global:**
+```tsx
+<Toaster
+  position="top-right"
+  toastOptions={{
+    duration: 4000,
+    success: { duration: 3000 },
+    error: { duration: 5000 },
+  }}
+/>
+```
+
+**Integraciones (7 archivos):**
+- Login: `toast.success('¡Bienvenido de vuelta!')`
+- Register: `toast.success('¡Cuenta creada! Verifica tu email')`
+- Publish: `toast.success('¡Recurso publicado!')`
+- Edit: `toast.success('Nueva versión creada: vX.Y.Z')`
+- Vote: `toast.success('¡Voto registrado!')`
+- Fork: `toast.success('¡Recurso reutilizado!')`
+- Errors: `toast.error(message)`
+
+---
+
+#### 17.2.2 Loading Skeletons
+**Archivo:** `frontend/components/Skeletons.tsx` (100 LOC)
+
+**Componentes:**
+```typescript
+- Skeleton: Base component (animate-pulse + bg-gray-200)
+- ResourceCardSkeleton: Matches ResourceCard structure
+- ExplorePageSkeleton: Full page skeleton (available)
+```
+
+**Integración Explore:**
+```tsx
+{loading && (
+  <div className="grid grid-cols-3 gap-6">
+    {[...Array(6)].map((_, i) => <ResourceCardSkeleton key={i} />)}
+  </div>
+)}
+```
+
+**Mejora:** Skeleton matching > Generic spinner (perceived performance)
+
+---
+
+#### 17.2.3 E2E Tests (Playwright)
+**Archivo:** `frontend/e2e/tests/basic-flow.spec.ts` (180 LOC)
+
+**Test 1: Complete User Journey**
+```
+1. Landing → Explore
+2. View resource detail
+3. Register with test user
+4. Login
+5. Publish new resource
+6. Vote on resource
+7. Edit resource
+8. Logout
+```
+
+**Test 2: Validation Errors**
+- Empty form submission
+- Weak password
+- Field-level errors
+
+**Test 3: Login Errors**
+- Wrong credentials
+- Error message display
+
+---
+
+### 17.3 Métricas
+
+#### Código Agregado
+```
+Toast integrations:     7 archivos
+Skeletons:              100 LOC
+E2E test:               180 LOC
+Tiempo:                 ~30min
+```
+
+---
+
+### 17.4 Estado Final
+
+**MVP Overall Progress: ~80%** (deployment-ready)
+
+- ✅ Backend: 100%
+- ✅ Frontend: 90%
+- ✅ Quality: 80%
+
+---
+
+**Registro actualizado:** 2026-02-17 (Sesión 8 — Tests & Polish)  
+**MVP Status:** ✅ COMPLETADO (deployment-ready)

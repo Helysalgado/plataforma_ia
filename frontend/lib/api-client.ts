@@ -18,11 +18,13 @@ export const apiClient = axios.create({
 // Request interceptor for adding auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // TODO: Add token from cookies/localStorage when auth is implemented
-    // const token = getAuthToken();
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    // Get token from localStorage (client-side only)
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('bioai_access_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
     return config;
   },
   (error) => {
@@ -34,7 +36,18 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // TODO: Handle 401 (redirect to login), 500 (show error toast)
+    // Handle 401 Unauthorized (token expired or invalid)
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      // Clear tokens
+      localStorage.removeItem('bioai_access_token');
+      localStorage.removeItem('bioai_refresh_token');
+      
+      // Redirect to login if not already there
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
