@@ -194,13 +194,15 @@ class ResourceService:
         latest_version.validated_at = timezone.now()
         latest_version.save(update_fields=['status', 'validated_at', 'updated_at'])
         
-        # TODO: Create notification for owner (US-18)
-        # from apps.notifications.services import NotificationService
-        # NotificationService.create_notification(
-        #     user=resource.owner,
-        #     type='resource_validated',
-        #     resource=resource
-        # )
+        # Create notification for owner (US-18)
+        from apps.interactions.services import NotificationService
+        NotificationService.create_notification(
+            user=resource.owner,
+            notification_type='resource_validated',
+            message=f'Tu recurso "{latest_version.title}" ha sido validado',
+            resource=resource,
+            actor=user  # Admin who validated
+        )
         
         return resource
     
@@ -269,6 +271,17 @@ class ResourceService:
         # Increment forks_count on original
         original_resource.forks_count += 1
         original_resource.save(update_fields=['forks_count', 'updated_at'])
+        
+        # Create notification for original resource owner (US-18)
+        from apps.interactions.services import NotificationService
+        if original_resource.owner != user:  # Don't notify self-forks
+            NotificationService.create_notification(
+                user=original_resource.owner,
+                notification_type='resource_forked',
+                message=f'{user.name} reutilizó tu recurso "{latest_version.title}"',
+                resource=original_resource,
+                actor=user
+            )
         
         return forked_resource
     
