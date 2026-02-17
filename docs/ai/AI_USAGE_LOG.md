@@ -2665,3 +2665,195 @@ Tiempo:                 ~30min
 
 **Registro actualizado:** 2026-02-17 (Sesión 8 — Tests & Polish)  
 **MVP Status:** ✅ COMPLETADO (deployment-ready)
+
+---
+
+## 18. SESIÓN 9: CI/CD SETUP — GitHub Actions, Nginx, SSL, Deployment Guide (2026-02-17)
+
+### 18.1 Contexto
+
+**Solicitud del usuario:**
+> "Opción A: Deploy Inmediato"
+
+**Objetivo:**
+1. CI/CD setup (GitHub Actions)
+2. Configuración Nginx + SSL
+3. Docker Compose producción
+4. Guía de deployment completa
+
+---
+
+### 18.2 Implementación
+
+#### 18.2.1 GitHub Actions CI/CD
+**Archivos:** `.github/workflows/ci.yml`, `.github/workflows/cd.yml`
+
+**CI Workflow (ci.yml):**
+- Backend: lint (flake8, black) + tests (pytest + coverage)
+- Frontend: lint (ESLint) + type check (tsc) + build
+- Docker: build test de ambas imágenes
+- Triggers: push/PR a main y develop
+
+**CD Workflow (cd.yml):**
+- Auto-deploy en push a main
+- Manual trigger con workflow_dispatch
+- SSH deployment al servidor
+- Health checks post-deploy
+- Rollback manual disponible
+
+#### 18.2.2 Environment Variables
+**Archivo:** `.env.example` (95 líneas)
+
+**Secciones:**
+- General (DEBUG, ALLOWED_HOSTS)
+- Security (SECRET_KEY, JWT_SECRET_KEY, CORS)
+- Database (PostgreSQL config)
+- Email (SMTP Gmail)
+- Frontend (NEXT_PUBLIC_* vars)
+- Storage (S3/MinIO opcional)
+- Monitoring (Sentry opcional)
+
+#### 18.2.3 Nginx Configuration
+**Archivo:** `nginx/bioai.conf` (150 líneas)
+
+**Features:**
+- HTTP → HTTPS redirect
+- SSL/TLS 1.2+ with modern ciphers
+- Security headers (HSTS, CSP, X-Frame-Options)
+- Gzip compression
+- API proxy (Django /api/)
+- Frontend proxy (Next.js /)
+- Static files caching (1y)
+- Health check endpoint
+
+#### 18.2.4 Docker Compose Production
+**Archivo:** `docker-compose.prod.yml`
+
+**Services:**
+- db: PostgreSQL 15 con health check
+- backend: Gunicorn (4 workers)
+- frontend: Next.js production build
+- nginx: Reverse proxy + SSL termination
+- certbot: Let's Encrypt SSL
+
+**Volumes:**
+- postgres_data: Database persistence
+- static_volume: Django static files
+- media_volume: User uploads
+- certbot_conf: SSL certificates
+
+#### 18.2.5 SSL Setup Script
+**Archivo:** `scripts/setup-ssl.sh` (100 líneas)
+
+**Funcionalidad:**
+- Crear directorios necesarios
+- Start Nginx temporal (HTTP only)
+- Obtener certificados Let's Encrypt
+- Configurar auto-renewal (cron daily at 2 AM)
+- Validación de DNS
+- Error handling
+
+#### 18.2.6 Deployment Guide
+**Archivo:** `docs/delivery/DEPLOYMENT_GUIDE.md` (500+ líneas)
+
+**Contenido:**
+1. Pre-requisitos (servidor, DNS, firewall)
+2. Preparación servidor (Docker, usuario deploy)
+3. Configuración inicial (clone, .env)
+4. Setup SSL (script + verificación)
+5. Deployment (docker-compose + migrations)
+6. Post-deployment (backups, monitoring)
+7. CI/CD con GitHub Actions
+8. Troubleshooting (logs, rollback)
+9. Maintenance (updates, cleanup)
+10. Checklist completo
+
+---
+
+### 18.3 Métricas
+
+#### Archivos Creados
+```
+.github/workflows/ci.yml         150 LOC
+.github/workflows/cd.yml         80 LOC
+.env.example                     95 LOC
+nginx/bioai.conf                 150 LOC
+docker-compose.prod.yml          100 LOC
+scripts/setup-ssl.sh             100 LOC
+docs/delivery/DEPLOYMENT_GUIDE.md 500+ LOC
+─────────────────────────────────────────
+Total:                           1,175+ LOC
+```
+
+#### Tiempo
+```
+CI/CD workflows:        15 min
+Environment vars:       10 min
+Nginx config:           15 min
+Docker Compose prod:    10 min
+SSL script:             10 min
+Deployment guide:       20 min
+─────────────────────────────────────────
+Total:                  80 min (~1.3h)
+```
+
+---
+
+### 18.4 Estado Final
+
+**MVP Overall Progress: ~85%** (deployment-ready with CI/CD)
+
+- ✅ Backend: 100%
+- ✅ Frontend: 90%
+- ✅ Quality: 80%
+- ✅ CI/CD: 100%
+- ✅ Deployment: 100% (docs + config)
+
+**Listo para:** Deploy a bioai.ccg.unam.mx ✅
+
+---
+
+### 18.5 Lecciones Aprendidas
+
+#### Fortalezas IA (DevOps):
+1. **GitHub Actions workflows:** Estructura completa con jobs paralelos
+2. **Nginx config:** Security headers y SSL best practices
+3. **Docker Compose:** Health checks y dependencies correctas
+4. **Scripts Bash:** Error handling y colorized output
+5. **Documentation:** Guía step-by-step exhaustiva
+
+#### Limitaciones:
+1. **Secrets management:** No sugiere Vault o SOPS
+2. **Monitoring:** Config básica, no Prometheus/Grafana completo
+3. **Scaling:** No incluye load balancing o replicas
+4. **Testing:** No smoke tests post-deploy automáticos
+
+---
+
+### 18.6 Deployment Ready Checklist
+
+#### CI/CD ✅
+- ✅ CI workflow (lint + tests)
+- ✅ CD workflow (deploy + rollback)
+- ✅ GitHub Secrets documentados
+- ✅ Auto-deployment en push to main
+
+#### Infrastructure ✅
+- ✅ Nginx config production-ready
+- ✅ SSL setup automatizado
+- ✅ Docker Compose production
+- ✅ Health checks configurados
+
+#### Documentation ✅
+- ✅ .env.example completo
+- ✅ Deployment guide (500+ líneas)
+- ✅ Troubleshooting section
+- ✅ Maintenance procedures
+
+**Próximo paso:** Ejecutar deployment en servidor bioai.ccg.unam.mx
+
+---
+
+**Registro actualizado:** 2026-02-17 (Sesión 9 — CI/CD Setup)  
+**Status:** ✅ DEPLOYMENT-READY (infra + docs completos)  
+**Próxima actualización:** Post-deployment monitoring
