@@ -16,6 +16,34 @@
 
 ---
 
+## 🌐 Demo en Vivo
+
+🚀 **Acceso a la plataforma:** [http://132.248.34.173:3000](http://132.248.34.173:3000)
+
+**Credenciales de prueba:**
+- **Usuario Demo:** `demo@example.com` / `Demo123!`
+- **Administrador:** Solicitar acceso
+
+> 💡 Esta es una instancia de revisión temporal para evaluación académica.
+
+---
+
+## 🎥 Video Demostrativo
+
+📹 **Video completo de funcionalidades:** [Próximamente - Subir a Google Drive o YouTube]
+
+**Funcionalidades demostradas:**
+- Exploración y búsqueda de recursos
+- Sistema de votación y validación
+- Publicación de nuevos recursos
+- Fork y reutilización con trazabilidad
+- Perfil de usuario y estadísticas
+- Panel de administración
+
+> 📎 Para agregar el video: Sube a Google Drive (público) o YouTube (no listado) y actualiza este enlace
+
+---
+
 ## 📋 Descripción
 
 BioAI Hub es una plataforma web que permite a investigadores del CCG:
